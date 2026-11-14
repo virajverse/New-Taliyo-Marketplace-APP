@@ -1,0 +1,36 @@
+{
+  "name": "taliyo-marketplace-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "lint": "eslint app components lib",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.74.0",
+    "@types/qrcode": "^1.5.6",
+    "@upstash/ratelimit": "^2.2.1",
+    "@upstash/redis": "^1.41.0",
+    "lucide-react": "^0.510.0",
+    "next": "16.1.1",
+    "qrcode": "^1.5.4",
+    "razorpay": "^2.9.8",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
+    "@types/node": "22.14.1",
+    "@types/react": "19.0.10",
+    "@types/react-dom": "19.0.4",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.25.1",
+    "eslint-config-next": "^15.5.7",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "5.8.3"
+  }
+}
