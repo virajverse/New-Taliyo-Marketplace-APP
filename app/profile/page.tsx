@@ -71,7 +71,7 @@ const AVATAR_OPTIONS = [
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { isInstalled, triggerInstall } = usePwaInstall();
+  const { canInstallNative, isIos, isInstalled, triggerInstall } = usePwaInstall();
 
   // Auth & User State
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -734,7 +734,7 @@ export default function ProfilePage() {
             </Link>
 
             {/* 5. Install App (PWA) */}
-            {!isInstalled && (
+            {!isInstalled && (canInstallNative || isIos) && (
               <button
                 type="button"
                 onClick={triggerInstall}

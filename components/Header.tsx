@@ -9,7 +9,7 @@ import { usePwaInstall } from '@/components/PwaInstallProvider';
 import { subscribeSmartFetch } from '@/lib/clientCache';
 
 export default function Header() {
-  const { isInstalled, triggerInstall } = usePwaInstall();
+  const { canInstallNative, isIos, isInstalled, triggerInstall } = usePwaInstall();
   const [cartCount, setCartCount] = useState(0);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
 
@@ -101,8 +101,8 @@ export default function Header() {
 
       {/* Action Icons Row */}
       <div className="flex items-center gap-2">
-        {/* PWA Install button (visible whenever not running as installed standalone app) */}
-        {!isInstalled && (
+        {/* PWA Install button (only shown when direct native prompt or iOS install is available) */}
+        {!isInstalled && (canInstallNative || isIos) && (
           <button
             type="button"
             onClick={triggerInstall}

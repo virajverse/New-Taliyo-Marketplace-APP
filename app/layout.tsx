@@ -50,6 +50,7 @@ export default function RootLayout({
                   }
                 } catch (e) {}
                 try {
+                  window.__bipSetup = true;
                   window.addEventListener('beforeinstallprompt', function(e) {
                     try { e.preventDefault(); } catch (err) {}
                     try { window.__bip = e; } catch (err) {}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Download, Share, PlusSquare, MoreVertical, X, Smartphone } from 'lucide-react';
+import { Share, PlusSquare, X, Smartphone } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms?: string[];
@@ -9,8 +9,13 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
+interface RelatedApp {
+  platform?: string;
+}
+
 interface PwaWindow extends Window {
   __bip?: BeforeInstallPromptEvent | null;
+  __bipSetup?: boolean;
 }
 
 interface PwaInstallContextValue {
@@ -51,6 +56,24 @@ export default function PwaInstallProvider({ children }: { children: React.React
     const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
     setIsIos(iosDevice && isSafari && !standalone);
 
+    if (!standalone) {
+      const navWithApps = window.navigator as Navigator & {
+        getInstalledRelatedApps?: () => Promise<RelatedApp[]>;
+      };
+      if (typeof navWithApps.getInstalledRelatedApps === 'function') {
+        navWithApps
+          .getInstalledRelatedApps()
+          .then((apps) => {
+            if (Array.isArray(apps) && apps.some((a) => a.platform === 'webapp')) {
+              setIsInstalled(true);
+              setDeferredPrompt(null);
+              pwaWin.__bip = null;
+            }
+          })
+          .catch(() => {});
+      }
+    }
+
     if ('serviceWorker' in window.navigator) {
       window.navigator.serviceWorker
         .register('/sw.js', { scope: '/', updateViaCache: 'none' })
@@ -60,6 +83,9 @@ export default function PwaInstallProvider({ children }: { children: React.React
               reg.waiting.postMessage({ type: 'SKIP_WAITING' });
             } catch {}
           }
+          try {
+            reg.update().catch(() => {});
+          } catch {}
         })
         .catch(() => {});
     }
@@ -99,13 +125,17 @@ export default function PwaInstallProvider({ children }: { children: React.React
       }
     };
 
-    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+    if (!pwaWin.__bipSetup) {
+      window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+    }
     window.addEventListener('bipready', onBipReady);
     window.addEventListener('appinstalled', onAppInstalled);
     mm.addEventListener('change', onDisplayChange);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+      if (!pwaWin.__bipSetup) {
+        window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+      }
       window.removeEventListener('bipready', onBipReady);
       window.removeEventListener('appinstalled', onAppInstalled);
       mm.removeEventListener('change', onDisplayChange);
@@ -133,8 +163,10 @@ export default function PwaInstallProvider({ children }: { children: React.React
       }
     }
 
-    setGuideOpen(true);
-  }, [deferredPrompt, isInstalled]);
+    if (isIos) {
+      setGuideOpen(true);
+    }
+  }, [deferredPrompt, isInstalled, isIos]);
 
   return (
     <PwaInstallContext.Provider
@@ -147,7 +179,7 @@ export default function PwaInstallProvider({ children }: { children: React.React
     >
       {children}
 
-      {guideOpen && (
+      {guideOpen && isIos && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-3xl bg-[#0f1123] border border-purple-500/30 p-5 shadow-2xl space-y-4">
             <div className="flex items-start justify-between gap-3">
@@ -169,29 +201,16 @@ export default function PwaInstallProvider({ children }: { children: React.React
               </button>
             </div>
 
-            {isIos ? (
-              <ol className="space-y-2.5 text-xs text-gray-300 bg-[#15172e] rounded-2xl p-3.5 border border-purple-500/15">
-                <li className="flex items-center gap-2.5">
-                  <Share className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>Tap the <strong>Share</strong> button in Safari&apos;s toolbar.</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <PlusSquare className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>Scroll down and select <strong>Add to Home Screen</strong>.</span>
-                </li>
-              </ol>
-            ) : (
-              <ol className="space-y-2.5 text-xs text-gray-300 bg-[#15172e] rounded-2xl p-3.5 border border-purple-500/15">
-                <li className="flex items-center gap-2.5">
-                  <MoreVertical className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>Open your browser menu (<strong>⋮</strong>) or address bar install icon.</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <Download className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>Select <strong>Install App</strong> or <strong>Add to Home Screen</strong>.</span>
-                </li>
-              </ol>
-            )}
+            <ol className="space-y-2.5 text-xs text-gray-300 bg-[#15172e] rounded-2xl p-3.5 border border-purple-500/15">
+              <li className="flex items-center gap-2.5">
+                <Share className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>Tap the <strong>Share</strong> button in Safari&apos;s toolbar.</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <PlusSquare className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>Scroll down and select <strong>Add to Home Screen</strong>.</span>
+              </li>
+            </ol>
 
             <button
               onClick={() => setGuideOpen(false)}

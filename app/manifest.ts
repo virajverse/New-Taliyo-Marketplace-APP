@@ -11,6 +11,13 @@ export default function manifest(): MetadataRoute.Manifest {
     display: 'standalone',
     background_color: '#07070d',
     theme_color: '#07070d',
+    prefer_related_applications: false,
+    related_applications: [
+      {
+        platform: 'webapp',
+        url: 'https://app.taliyotechnologies.com/manifest.webmanifest',
+      },
+    ],
     icons: [
       {
         src: '/icons/icon-192.png',
