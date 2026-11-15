@@ -5,7 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft,
   Pencil,
   ShieldCheck,
   Mail,
@@ -231,6 +230,19 @@ export default function ProfilePage() {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
+  const formatPhoneDisplay = (rawPhone: string) => {
+    const trimmed = rawPhone.trim();
+    if (!trimmed) return '';
+    const digits = trimmed.replace(/\D/g, '');
+    if (digits.length === 10) {
+      return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+    }
+    if (digits.length === 12 && digits.startsWith('91')) {
+      return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+    }
+    return trimmed;
+  };
+
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCoupon(code);
@@ -293,32 +305,23 @@ export default function ProfilePage() {
 
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.back()}
-            aria-label="Go Back"
-            className="w-10 h-10 rounded-full bg-[#121429] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/40 hover:bg-[#1a1d3d] transition-all shadow-sm cursor-pointer"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight leading-tight">
-              My Profile
-            </h1>
-            <p className="text-xs text-gray-400 leading-tight">
-              Client workspace & account management
-            </p>
-          </div>
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight leading-tight">
+            My Profile
+          </h1>
+          <p className="text-xs text-gray-400 leading-tight">
+            Manage your account, orders & preferences
+          </p>
         </div>
 
         {isAuthenticated ? (
           <button
             onClick={() => setIsEditProfileOpen(true)}
             aria-label="Edit Profile"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#151733] border border-purple-500/30 text-purple-200 text-xs font-bold hover:bg-[#1f2247] hover:text-white transition-all shadow-sm cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#151733] border border-purple-500/30 text-purple-200 text-xs font-bold hover:bg-[#1f2247] hover:text-white transition-all shadow-sm cursor-pointer"
           >
             <Pencil className="w-3.5 h-3.5" />
-            <span>Edit</span>
+            <span>Edit Profile</span>
           </button>
         ) : (
           <Link
@@ -338,7 +341,7 @@ export default function ProfilePage() {
 
           {isAuthLoading ? (
             <div className="relative flex items-center gap-4 animate-pulse">
-              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-purple-900/30 shrink-0" />
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-purple-900/30 shrink-0" />
               <div className="flex-1 space-y-2">
                 <div className="h-4 bg-purple-800/40 rounded w-1/2" />
                 <div className="h-3 bg-purple-900/30 rounded w-2/3" />
@@ -369,7 +372,7 @@ export default function ProfilePage() {
           ) : (
             <div className="relative flex items-center gap-4">
               {/* Avatar */}
-              <div className="relative w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-[#1e2040] border-2 border-purple-500/40 p-0.5 shadow-lg shrink-0">
+              <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-[#1e2040] border-2 border-purple-500/40 p-0.5 shadow-lg shrink-0">
                 <div className="relative w-full h-full rounded-[14px] overflow-hidden bg-[#0a0a14]">
                   {BADGE_AVATAR_STYLES[user.avatar] ? (
                     <div
@@ -388,13 +391,6 @@ export default function ProfilePage() {
                     />
                   )}
                 </div>
-                <button
-                  onClick={() => setIsEditProfileOpen(true)}
-                  aria-label="Change Avatar"
-                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center shadow hover:bg-purple-500 transition-colors"
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
               </div>
 
               {/* Info */}
@@ -425,73 +421,18 @@ export default function ProfilePage() {
                 )}
 
                 {user.phone ? (
-                  <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-0.5 truncate">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-300 mt-1 truncate">
                     <Phone className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    <span>{user.phone}</span>
+                    <span>{formatPhoneDisplay(user.phone)}</span>
                   </div>
                 ) : (
-                  <div className="text-[11px] text-purple-300/60 mt-0.5">
-                    Tap edit to add contact phone
+                  <div className="text-[11px] text-purple-300/60 mt-1">
+                    Tap Edit Profile to add phone number
                   </div>
                 )}
               </div>
             </div>
           )}
-        </div>
-
-        {/* Quick Stats Grid (4 Live Real Stats) */}
-        <div className="grid grid-cols-4 gap-2">
-          {/* Total Orders */}
-          <Link
-            href="/orders"
-            className="flex flex-col items-center justify-center py-3 px-1 rounded-2xl bg-[#0f1123]/90 border border-purple-500/15 hover:border-purple-500/40 hover:bg-[#151733] transition-all shadow-sm group cursor-pointer"
-          >
-            <span className="text-lg sm:text-xl font-black text-white group-hover:text-purple-300 transition-colors">
-              {realOrderStats.total === null ? '—' : realOrderStats.total}
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-medium text-gray-400 mt-0.5 leading-tight text-center">
-              Orders
-            </span>
-          </Link>
-
-          {/* Active Orders */}
-          <Link
-            href="/orders"
-            className="flex flex-col items-center justify-center py-3 px-1 rounded-2xl bg-[#0f1123]/90 border border-purple-500/15 hover:border-purple-500/40 hover:bg-[#151733] transition-all shadow-sm group cursor-pointer"
-          >
-            <span className="text-lg sm:text-xl font-black text-cyan-400 group-hover:text-cyan-300 transition-colors">
-              {realOrderStats.active}
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-medium text-gray-400 mt-0.5 leading-tight text-center">
-              Active
-            </span>
-          </Link>
-
-          {/* Wishlist Items */}
-          <Link
-            href="/wishlist"
-            className="flex flex-col items-center justify-center py-3 px-1 rounded-2xl bg-[#0f1123]/90 border border-purple-500/15 hover:border-purple-500/40 hover:bg-[#151733] transition-all shadow-sm group cursor-pointer"
-          >
-            <span className="text-lg sm:text-xl font-black text-pink-400 group-hover:text-pink-300 transition-colors">
-              {wishlistCount > 0 ? wishlistCount : '0'}
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-medium text-gray-400 mt-0.5 leading-tight text-center">
-              Wishlist
-            </span>
-          </Link>
-
-          {/* Live Coupons Available */}
-          <button
-            onClick={() => setIsCouponsOpen(true)}
-            className="flex flex-col items-center justify-center py-3 px-1 rounded-2xl bg-[#0f1123]/90 border border-purple-500/15 hover:border-purple-500/40 hover:bg-[#151733] transition-all shadow-sm group cursor-pointer"
-          >
-            <span className="text-lg sm:text-xl font-black text-amber-400 group-hover:text-amber-300 transition-colors">
-              {liveCoupons.length}
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-medium text-gray-400 mt-0.5 leading-tight text-center">
-              Coupons
-            </span>
-          </button>
         </div>
 
         {/* =========================================
@@ -512,10 +453,15 @@ export default function ProfilePage() {
                   <Package className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-white group-hover:text-purple-200 transition-colors">
                       My Orders & Bookings
                     </span>
+                    {realOrderStats.total !== null && realOrderStats.total > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-200 text-[10px] font-bold">
+                        {realOrderStats.total} Total
+                      </span>
+                    )}
                     {realOrderStats.active > 0 ? (
                       <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold">
                         {realOrderStats.active} Active
@@ -524,14 +470,14 @@ export default function ProfilePage() {
                       <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
                         {realOrderStats.pending} Pending
                       </span>
-                    ) : (
+                    ) : realOrderStats.total === 0 ? (
                       <span className="px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
-                        {realOrderStats.total === 0 ? '0 Orders' : 'Live'}
+                        0 Orders
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Track project deliverables, milestones & history
+                    Track deliverables, milestones &amp; order history
                   </div>
                 </div>
               </div>
@@ -548,11 +494,18 @@ export default function ProfilePage() {
                   <Heart className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-white group-hover:text-pink-200 transition-colors">
-                    Saved Services (Wishlist)
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-white group-hover:text-pink-200 transition-colors">
+                      Saved Services (Wishlist)
+                    </span>
+                    {wishlistCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-pink-500/15 border border-pink-500/30 text-pink-300 text-[10px] font-bold">
+                        {wishlistCount} Saved
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Saved software services &amp; packages
+                    Bookmarked services &amp; custom packages
                   </div>
                 </div>
               </div>
@@ -580,7 +533,7 @@ export default function ProfilePage() {
                     )}
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Official promotional discount codes from Admin Panel
+                    Apply promo codes &amp; exclusive discount offers
                   </div>
                 </div>
               </div>
@@ -597,28 +550,7 @@ export default function ProfilePage() {
             Account & Security
           </h3>
           <div className="rounded-[22px] bg-[#0f1123]/95 border border-purple-500/15 divide-y divide-purple-500/10 overflow-hidden shadow-sm">
-            {/* 1. Personal Information */}
-            <button
-              onClick={() => (isAuthenticated ? setIsEditProfileOpen(true) : router.push('/login'))}
-              className="w-full flex items-center justify-between p-3.5 hover:bg-[#161833] transition-colors group cursor-pointer text-left"
-            >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-10 h-10 rounded-full bg-[#2a1740] border border-purple-500/25 flex items-center justify-center text-purple-300 shrink-0 group-hover:scale-105 transition-transform">
-                  <User className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-white group-hover:text-purple-200 transition-colors">
-                    Personal Information
-                  </div>
-                  <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Full name, contact phone & avatar
-                  </div>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors shrink-0 ml-2" />
-            </button>
-
-            {/* 2. App Settings */}
+            {/* App Settings & Security */}
             <Link
               href="/settings"
               className="flex items-center justify-between p-3.5 hover:bg-[#161833] transition-colors group cursor-pointer"
@@ -632,7 +564,7 @@ export default function ProfilePage() {
                     App Settings & Security
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Password update, 2FA, dark theme, currency & language
+                    Password, 2FA, theme &amp; app preferences
                   </div>
                 </div>
               </div>
@@ -663,7 +595,7 @@ export default function ProfilePage() {
                     Notification Inbox
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Milestone approvals, deployment alerts & updates
+                    Project updates, milestones &amp; alerts
                   </div>
                 </div>
               </div>
@@ -684,7 +616,7 @@ export default function ProfilePage() {
                     Dedicated Support
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Direct WhatsApp &amp; support team assistance
+                    Direct WhatsApp &amp; priority team support
                   </div>
                 </div>
               </div>
@@ -705,7 +637,7 @@ export default function ProfilePage() {
                     Help Center & FAQs
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Guides, delivery process & common technical answers
+                    Guides, delivery process &amp; common FAQs
                   </div>
                 </div>
               </div>
@@ -726,7 +658,7 @@ export default function ProfilePage() {
                     Privacy & Data Protection
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Zero payment storage policy &amp; client confidentiality
+                    Data security &amp; client confidentiality
                   </div>
                 </div>
               </div>
@@ -926,7 +858,7 @@ export default function ProfilePage() {
                   <Tag className="w-10 h-10 text-gray-600 mx-auto" />
                   <p className="text-sm font-semibold text-gray-300">No active coupons available right now</p>
                   <p className="text-xs text-gray-400 max-w-xs mx-auto">
-                    Check back soon! When promotions or seasonal vouchers are launched in the Admin Panel, they will appear here.
+                    Check back soon! New promotional offers and seasonal vouchers will appear here.
                   </p>
                 </div>
               ) : (
