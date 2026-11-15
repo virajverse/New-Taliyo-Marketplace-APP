@@ -104,8 +104,22 @@ export default function CategoryDetailPage() {
 
         if (category) {
           setCategoryName(category.name);
+
+          // Only show subcategories that actually have services in this category
+          const activeSubcatNames = new Set(
+            catServices
+              .map((s) => {
+                const subObj = Array.isArray(s.subcategories) ? s.subcategories[0] : s.subcategories;
+                return subObj?.name;
+              })
+              .filter(Boolean)
+          );
+          const validSubcats = subcats.filter((sub) => activeSubcatNames.has(sub.name));
+
           setSubcategories(
-            subcats.length > 0 ? ['All Systems', ...subcats.map((s) => s.name)] : ['All Systems'],
+            validSubcats.length > 0
+              ? ['All Systems', ...validSubcats.map((s) => s.name)]
+              : ['All Systems'],
           );
 
           if (catServices.length > 0) {

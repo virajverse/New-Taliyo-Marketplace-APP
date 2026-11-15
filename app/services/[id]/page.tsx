@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -47,6 +48,17 @@ interface ServiceReviewItem {
   created_at?: string;
 }
 
+interface RelatedServiceItem {
+  id: string;
+  title: string;
+  slug: string;
+  price: number;
+  rating: number;
+  reviewsCount: number;
+  imageSrc: string;
+  isFeatured?: boolean;
+}
+
 interface ServiceMeta {
   id: string;
   title: string;
@@ -57,6 +69,8 @@ interface ServiceMeta {
   imageSrc: string;
   images: string[];
   demoUrl?: string | null;
+  category?: { id: string; name: string; slug: string } | null;
+  subcategory?: { id: string; name: string; slug: string } | null;
 }
 
 export default function ServiceDetailPage() {
@@ -65,6 +79,8 @@ export default function ServiceDetailPage() {
   const rawId = (params?.id as string) || '';
 
   const [serviceMeta, setServiceMeta] = useState<ServiceMeta | null>(null);
+  const [relatedServices, setRelatedServices] = useState<RelatedServiceItem[]>([]);
+  const [relatedWishlist, setRelatedWishlist] = useState<Record<string, boolean>>({});
   const [supportWhatsApp, setSupportWhatsApp] = useState('917042523611');
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [isGridOpen, setIsGridOpen] = useState(false);
@@ -136,6 +152,19 @@ export default function ServiceDetailPage() {
         price_min?: number | null;
         video_url?: string | null;
       } | null;
+      category?: { id: string; name: string; slug: string } | null;
+      subcategory?: { id: string; name: string; slug: string } | null;
+      relatedServices?: Array<{
+        id: string;
+        title: string;
+        slug?: string | null;
+        price_min?: number | null;
+        rating_average?: number | null;
+        rating_count?: number | null;
+        images?: string[] | null;
+        is_featured?: boolean;
+        service_plans?: Array<{ price_min?: number | null }>;
+      }>;
       plans?: Array<{
         level?: string | null;
         is_recommended?: boolean;
@@ -178,12 +207,41 @@ export default function ServiceDetailPage() {
           imageSrc: img,
           images: rawImages,
           demoUrl: resolvedDemo,
+          category: json?.category || null,
+          subcategory: json?.subcategory || null,
         });
         setActiveImageIdx(0);
 
         fetchSavedWishlistServiceIds()
-          .then(({ serviceIds }) => setIsWishlisted(serviceIds.includes(svc.id)))
+          .then(({ serviceIds }) => {
+            setIsWishlisted(serviceIds.includes(svc.id));
+            const wMap: Record<string, boolean> = {};
+            serviceIds.forEach((sid) => {
+              wMap[sid] = true;
+            });
+            setRelatedWishlist(wMap);
+          })
           .catch(() => {});
+
+        const rawRelated = Array.isArray(json?.relatedServices) ? json.relatedServices : [];
+        const mappedRelated: RelatedServiceItem[] = rawRelated.map((r) => {
+          const rImgs = Array.isArray(r.images) ? r.images : [];
+          const rPlans = Array.isArray(r.service_plans) ? r.service_plans : [];
+          const planPrices = rPlans.map((p) => Number(p?.price_min || 0)).filter((p) => p > 0);
+          const minPrice = Number(r.price_min || 0) || (planPrices.length ? Math.min(...planPrices) : 0);
+
+          return {
+            id: r.id,
+            title: r.title,
+            slug: r.slug || r.id,
+            price: minPrice,
+            rating: Number(r.rating_average || 0),
+            reviewsCount: Number(r.rating_count || 0),
+            imageSrc: rImgs[0] || '/assets/hero_laptop_clean.png',
+            isFeatured: Boolean(r.is_featured),
+          };
+        });
+        setRelatedServices(mappedRelated);
 
         if (plans.length > 0) {
           const mappedPlans: PackageOption[] = plans.map((p, idx) => {
@@ -272,6 +330,19 @@ export default function ServiceDetailPage() {
     const text = `Hello Taliyo Technologies, I want to explore the live interactive demo / staging environment for: "${serviceMeta?.title || 'this system'}".`;
     const waUrl = `https://wa.me/${supportWhatsApp}?text=${encodeURIComponent(text)}`;
     window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const toggleRelatedWishlist = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const curr = Boolean(relatedWishlist[id]);
+    setRelatedWishlist((prev) => ({ ...prev, [id]: !curr }));
+    try {
+      const saved = await toggleWishlistService(id, curr);
+      setRelatedWishlist((prev) => ({ ...prev, [id]: saved }));
+    } catch {
+      setRelatedWishlist((prev) => ({ ...prev, [id]: curr }));
+    }
   };
 
   const handlePrevImage = (e?: React.MouseEvent) => {
@@ -637,6 +708,32 @@ export default function ServiceDetailPage() {
                 </button>
               </div>
 
+              {/* Category Breadcrumbs & Subcategory Pills */}
+              <div className="px-4 pt-3 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 text-[11px] text-purple-300/80 font-medium overflow-x-auto no-scrollbar">
+                  <Link href="/" className="hover:text-white transition-colors">Home</Link>
+                  <ChevronRight className="w-3 h-3 text-purple-500/60 shrink-0" />
+                  <Link href="/categories" className="hover:text-white transition-colors">Categories</Link>
+                  {serviceMeta.category && (
+                    <>
+                      <ChevronRight className="w-3 h-3 text-purple-500/60 shrink-0" />
+                      <Link
+                        href={`/categories/${serviceMeta.category.slug}`}
+                        className="text-fuchsia-300 font-bold hover:underline truncate max-w-[150px]"
+                      >
+                        {serviceMeta.category.name}
+                      </Link>
+                    </>
+                  )}
+                </div>
+
+                {serviceMeta.subcategory && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-purple-950/70 border border-purple-400/30 text-[10px] font-bold text-purple-200">
+                    {serviceMeta.subcategory.name}
+                  </span>
+                )}
+              </div>
+
               {/* Title & Info Section */}
               <div className="px-4 pt-3 space-y-2">
                 <div className="flex items-center gap-1.5 text-xs text-purple-300 font-semibold">
@@ -826,6 +923,113 @@ export default function ServiceDetailPage() {
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Suggested Systems & Recommendations */}
+              {relatedServices.length > 0 && (
+                <div className="mt-8 px-4 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
+                        Similar Systems You May Like
+                      </h2>
+                      <p className="text-[11px] text-purple-200/60">
+                        {serviceMeta.category?.name
+                          ? `More from ${serviceMeta.category.name}`
+                          : 'Recommended verified systems'}
+                      </p>
+                    </div>
+
+                    {serviceMeta.category && (
+                      <Link
+                        href={`/categories/${serviceMeta.category.slug}`}
+                        className="text-xs font-bold text-fuchsia-400 hover:text-fuchsia-300 inline-flex items-center gap-0.5 transition-colors"
+                      >
+                        <span>View All</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </Link>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {relatedServices.map((item) => (
+                      <div
+                        key={item.id}
+                        className="group relative rounded-2xl bg-[#121326] border border-purple-500/20 hover:border-purple-400/50 shadow-lg overflow-hidden transition-all flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-[#1a0f35] to-[#0d071d] overflow-hidden">
+                            <Link href={`/services/${item.slug}`} className="block w-full h-full">
+                              <Image
+                                src={item.imageSrc}
+                                alt={item.title}
+                                fill
+                                className="object-cover group-hover:scale-105 transition-transform duration-300"
+                                unoptimized
+                              />
+                            </Link>
+
+                            <button
+                              type="button"
+                              onClick={(e) => toggleRelatedWishlist(item.id, e)}
+                              aria-label="Wishlist"
+                              className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all cursor-pointer"
+                            >
+                              <Heart
+                                className={`w-3 h-3 transition-colors ${
+                                  relatedWishlist[item.id] ? 'fill-pink-500 text-pink-500' : 'text-gray-300'
+                                }`}
+                              />
+                            </button>
+                          </div>
+
+                          <Link href={`/services/${item.slug}`} className="block p-2.5">
+                            <h3 className="font-bold text-white text-xs leading-snug line-clamp-2 group-hover:text-fuchsia-300 transition-colors">
+                              {item.title}
+                            </h3>
+                          </Link>
+                        </div>
+
+                        <div className="px-2.5 pb-2.5 pt-1.5 border-t border-purple-500/15 flex items-center justify-between">
+                          <div>
+                            <span className="text-[9px] text-gray-400 block leading-none">Starting at</span>
+                            <span className="text-xs font-black text-white">
+                              {item.price > 0 ? `₹${item.price.toLocaleString('en-IN')}` : 'Custom'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-0.5 text-[10px] font-bold text-white">
+                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                            <span>{item.rating > 0 ? item.rating : 'New'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Categories Navigation Strip */}
+              <div className="mt-8 px-4 pb-4 space-y-2.5">
+                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Explore Systems by Category
+                </span>
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                  {[
+                    { name: 'Customer Handling', slug: 'customer-handling-systems' },
+                    { name: 'Owner Visibility', slug: 'owner-visibility-systems' },
+                    { name: 'Business Launch', slug: 'business-launch-systems' },
+                    { name: 'Business Operations', slug: 'business-operations-systems' },
+                  ].map((cat) => (
+                    <Link
+                      key={cat.slug}
+                      href={`/categories/${cat.slug}`}
+                      className="px-3 py-1.5 rounded-full bg-[#14152e] hover:bg-[#1f2048] border border-purple-500/25 text-purple-200 hover:text-white text-xs font-medium shrink-0 transition-colors"
+                    >
+                      {cat.name}
+                    </Link>
+                  ))}
+                </div>
               </div>
             </>
           )}

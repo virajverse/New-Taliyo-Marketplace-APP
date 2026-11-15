@@ -72,7 +72,9 @@ export async function GET(req: NextRequest) {
           supabaseAdmin
             .from('subcategories')
             .select('name, slug')
-            .eq('category_id', category.id),
+            .eq('category_id', category.id)
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true }),
           supabaseAdmin
             .from('services')
             .select('*, service_plans(price_min), subcategories(name)')
@@ -134,7 +136,7 @@ export async function GET(req: NextRequest) {
           return { service: null, plans: [], reviews: [] };
         }
 
-        const [{ data: plans }, { data: reviews }] = await Promise.all([
+        const [{ data: plans }, { data: reviews }, catRes, subcatRes, { data: relatedRows }] = await Promise.all([
           supabaseAdmin
             .from('service_plans')
             .select('*')
@@ -146,10 +148,42 @@ export async function GET(req: NextRequest) {
             .eq('is_approved', true)
             .order('created_at', { ascending: false })
             .limit(4),
+          svc.category_id
+            ? supabaseAdmin
+                .from('categories')
+                .select('id, name, slug')
+                .eq('id', svc.category_id)
+                .maybeSingle()
+            : Promise.resolve({ data: null }),
+          svc.subcategory_id
+            ? supabaseAdmin
+                .from('subcategories')
+                .select('id, name, slug')
+                .eq('id', svc.subcategory_id)
+                .maybeSingle()
+            : Promise.resolve({ data: null }),
+          supabaseAdmin
+            .from('services')
+            .select('id, title, slug, price_min, rating_average, rating_count, images, is_featured, category_id, service_plans(price_min)')
+            .eq('is_active', true)
+            .neq('id', svc.id)
+            .order('is_featured', { ascending: false })
+            .limit(8),
         ]);
+
+        const catData = catRes && 'data' in catRes ? catRes.data : null;
+        const subcatData = subcatRes && 'data' in subcatRes ? subcatRes.data : null;
+
+        // Prioritize same-category systems first, then top systems
+        const sameCategory = (relatedRows || []).filter((r) => r.category_id === svc.category_id);
+        const otherCategory = (relatedRows || []).filter((r) => r.category_id !== svc.category_id);
+        const sortedRelated = [...sameCategory, ...otherCategory].slice(0, 4);
 
         return {
           service: svc,
+          category: catData,
+          subcategory: subcatData,
+          relatedServices: sortedRelated,
           plans: plans || [],
           reviews: reviews || [],
         };
