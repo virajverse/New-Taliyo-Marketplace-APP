@@ -11,9 +11,11 @@ import {
   LayoutGrid,
   List,
   Star,
+  Heart,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import { subscribeSmartFetch } from '@/lib/clientCache';
+import { fetchSavedWishlistServiceIds, toggleWishlistService } from '@/lib/wishlistClient';
 
 interface CategoryService {
   id: string;
@@ -42,7 +44,36 @@ export default function CategoryDetailPage() {
   const [activeSubcat, setActiveSubcat] = useState<string>('All Systems');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<string>('Popular');
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [wishlist, setWishlist] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const syncWishlist = async () => {
+      const { serviceIds } = await fetchSavedWishlistServiceIds();
+      const map: Record<string, boolean> = {};
+      serviceIds.forEach((id) => {
+        map[id] = true;
+      });
+      setWishlist(map);
+    };
+    void syncWishlist();
+    window.addEventListener('taliyo_wishlist_updated', syncWishlist);
+    return () => window.removeEventListener('taliyo_wishlist_updated', syncWishlist);
+  }, []);
+
+  const handleToggleWishlist = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const currentlySaved = Boolean(wishlist[id]);
+    setWishlist((prev) => ({ ...prev, [id]: !currentlySaved }));
+    try {
+      const nextSaved = await toggleWishlistService(id, currentlySaved);
+      setWishlist((prev) => ({ ...prev, [id]: nextSaved }));
+    } catch {
+      setWishlist((prev) => ({ ...prev, [id]: currentlySaved }));
+    }
+  };
 
   useEffect(() => {
     interface CategoryServiceRow {
@@ -137,7 +168,7 @@ export default function CategoryDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
         {/* Sticky Top Header */}
         <header className="sticky top-0 z-40 w-full bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -187,17 +218,44 @@ export default function CategoryDetailPage() {
         </div>
 
         {/* Filters and View Mode Controls */}
-        <div className="px-4 py-2 flex items-center justify-between border-b border-purple-500/10 text-xs">
-          <div className="flex items-center gap-2">
+        <div className="px-4 py-2 flex items-center justify-between border-b border-purple-500/10 text-xs relative">
+          <div className="relative flex items-center gap-2">
             <span className="text-gray-400 font-medium">Sort by:</span>
             <button
               type="button"
-              onClick={() => setSortBy(sortBy === 'Popular' ? 'Price: Low to High' : 'Popular')}
-              className="inline-flex items-center gap-1 font-bold text-white hover:text-fuchsia-300 transition-colors cursor-pointer"
+              onClick={() => setShowSortMenu((prev) => !prev)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#121326] border border-purple-500/20 font-bold text-white hover:text-fuchsia-300 transition-colors cursor-pointer"
             >
               <span>{sortBy}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-purple-400" />
+              <ChevronDown className={`w-3.5 h-3.5 text-purple-400 transition-transform ${showSortMenu ? 'rotate-180' : ''}`} />
             </button>
+            {showSortMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setShowSortMenu(false)}
+                />
+                <div className="absolute left-12 top-8 z-40 w-44 rounded-2xl bg-[#14152c] border border-purple-500/30 shadow-2xl py-1.5 overflow-hidden">
+                  {['Popular', 'Price: Low to High', 'Price: High to Low', 'Top Rated'].map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        setSortBy(opt);
+                        setShowSortMenu(false);
+                      }}
+                      className={`w-full text-left px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer ${
+                        sortBy === opt
+                          ? 'bg-purple-600/30 text-fuchsia-300'
+                          : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-1 bg-[#121326] p-1 rounded-xl border border-purple-500/20">
@@ -244,6 +302,12 @@ export default function CategoryDetailPage() {
                   if (a.price === 0) return 1;
                   if (b.price === 0) return -1;
                   return a.price - b.price;
+                }
+                if (sortBy === 'Price: High to Low') {
+                  return b.price - a.price;
+                }
+                if (sortBy === 'Top Rated') {
+                  return b.rating - a.rating;
                 }
                 return Number(b.isFeatured || false) - Number(a.isFeatured || false) || b.rating - a.rating;
               });
@@ -299,6 +363,18 @@ export default function CategoryDetailPage() {
                               {svc.badge}
                             </div>
                           )}
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleWishlist(svc.id, e)}
+                            aria-label="Save to Wishlist"
+                            className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 border border-white/15 flex items-center justify-center text-white backdrop-blur-md hover:bg-black/70 transition-all cursor-pointer z-10"
+                          >
+                            <Heart
+                              className={`w-3.5 h-3.5 transition-colors ${
+                                wishlist[svc.id] ? 'fill-rose-500 text-rose-500' : 'text-gray-200'
+                              }`}
+                            />
+                          </button>
                         </div>
                         <div className="p-2.5">
                           <h3 className="text-xs font-extrabold text-white leading-snug line-clamp-2 group-hover:text-fuchsia-300 transition-colors">
@@ -352,6 +428,18 @@ export default function CategoryDetailPage() {
                             {svc.badge}
                           </div>
                         )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleWishlist(svc.id, e)}
+                          aria-label="Save to Wishlist"
+                          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/50 border border-white/15 flex items-center justify-center text-white backdrop-blur-md hover:bg-black/70 transition-all cursor-pointer z-10"
+                        >
+                          <Heart
+                            className={`w-3 h-3 transition-colors ${
+                              wishlist[svc.id] ? 'fill-rose-500 text-rose-500' : 'text-gray-200'
+                            }`}
+                          />
+                        </button>
                       </div>
 
                       <div className="flex-1 min-w-0 flex flex-col justify-between">

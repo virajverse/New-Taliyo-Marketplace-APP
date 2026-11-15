@@ -46,6 +46,7 @@ export default function SearchPage() {
   const [sortBy, setSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'rating-desc'>('relevance');
   const [wishlist, setWishlist] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [openDropdown, setOpenDropdown] = useState<'price' | 'rating' | 'delivery' | 'sort' | null>(null);
   const [allServices, setAllServices] = useState<SearchResultItem[]>([]);
   const [dbCategories, setDbCategories] = useState<{ id: string; label: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -226,7 +227,7 @@ export default function SearchPage() {
 
   return (
     <div className="min-h-screen bg-[#080811] text-white flex flex-col items-center">
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#080811] relative shadow-2xl">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#080811] relative shadow-2xl">
         {/* Top Header */}
         <header className="sticky top-0 z-40 w-full bg-[#080811]/90 backdrop-blur-xl px-4 py-3 flex items-center justify-between border-b border-purple-500/10">
           <div className="flex items-center gap-3">
@@ -310,7 +311,7 @@ export default function SearchPage() {
         </div>
 
         {/* Secondary Filter Dropdowns Row */}
-        <div className="px-4 py-2">
+        <div className="px-4 py-2 relative">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             {/* Filters Button */}
             <button
@@ -321,6 +322,7 @@ export default function SearchPage() {
                 setSortBy('relevance');
                 setDeliveryFilter('all');
                 setActiveCategory('All');
+                setOpenDropdown(null);
               }}
               title={hasActiveFilters ? 'Reset all filters' : 'Filters active'}
               className="relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#121326] border border-purple-500/25 text-xs font-bold text-white shadow-sm flex-shrink-0 cursor-pointer hover:border-purple-400"
@@ -335,17 +337,7 @@ export default function SearchPage() {
             {/* Price Dropdown Button */}
             <button
               type="button"
-              onClick={() => {
-                setPriceFilter((prev) =>
-                  prev === 'all'
-                    ? 'under-15k'
-                    : prev === 'under-15k'
-                    ? '15k-35k'
-                    : prev === '15k-35k'
-                    ? 'above-35k'
-                    : 'all'
-                );
-              }}
+              onClick={() => setOpenDropdown((prev) => (prev === 'price' ? null : 'price'))}
               className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs shadow-sm flex-shrink-0 cursor-pointer transition-all ${
                 priceFilter !== 'all'
                   ? 'bg-purple-600/30 border-purple-400 text-fuchsia-300 font-bold'
@@ -361,15 +353,13 @@ export default function SearchPage() {
                   ? '₹15k–₹35k'
                   : '> ₹35k'}
               </span>
-              <ChevronDown className="w-3 h-3 text-gray-400" />
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${openDropdown === 'price' ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Rating Dropdown Button */}
             <button
               type="button"
-              onClick={() => {
-                setRatingFilter((prev) => (prev === 0 ? 4.8 : prev === 4.8 ? 4.9 : 0));
-              }}
+              onClick={() => setOpenDropdown((prev) => (prev === 'rating' ? null : 'rating'))}
               className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs shadow-sm flex-shrink-0 cursor-pointer transition-all ${
                 ratingFilter > 0
                   ? 'bg-purple-600/30 border-purple-400 text-fuchsia-300 font-bold'
@@ -377,39 +367,27 @@ export default function SearchPage() {
               }`}
             >
               <span>{ratingFilter > 0 ? `${ratingFilter}+ Rated` : 'Rating'}</span>
-              <ChevronDown className="w-3 h-3 text-gray-400" />
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${openDropdown === 'rating' ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Delivery Dropdown Button */}
             <button
               type="button"
-              onClick={() => {
-                setDeliveryFilter((prev) => (prev === 'all' ? 'fast' : 'all'));
-              }}
+              onClick={() => setOpenDropdown((prev) => (prev === 'delivery' ? null : 'delivery'))}
               className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs shadow-sm flex-shrink-0 cursor-pointer transition-all ${
                 deliveryFilter !== 'all'
                   ? 'bg-purple-600/30 border-purple-400 text-fuchsia-300 font-bold'
                   : 'bg-[#121326] border-purple-500/20 text-gray-300 hover:text-white'
               }`}
             >
-              <span>{deliveryFilter === 'fast' ? 'Express' : 'Delivery'}</span>
-              <ChevronDown className="w-3 h-3 text-gray-400" />
+              <span>{deliveryFilter === 'fast' ? 'Express (≤7d)' : 'Delivery'}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${openDropdown === 'delivery' ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Sort Dropdown Button */}
             <button
               type="button"
-              onClick={() => {
-                setSortBy((prev) =>
-                  prev === 'relevance'
-                    ? 'price-asc'
-                    : prev === 'price-asc'
-                    ? 'price-desc'
-                    : prev === 'price-desc'
-                    ? 'rating-desc'
-                    : 'relevance'
-                );
-              }}
+              onClick={() => setOpenDropdown((prev) => (prev === 'sort' ? null : 'sort'))}
               className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs shadow-sm flex-shrink-0 cursor-pointer transition-all ${
                 sortBy !== 'relevance'
                   ? 'bg-purple-600/30 border-purple-400 text-fuchsia-300 font-bold'
@@ -425,9 +403,108 @@ export default function SearchPage() {
                   ? 'Price: High-Low'
                   : 'Top Rated'}
               </span>
-              <ChevronDown className="w-3 h-3 text-gray-400" />
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${openDropdown === 'sort' ? 'rotate-180' : ''}`} />
             </button>
           </div>
+
+          {/* Active Dropdown Menu */}
+          {openDropdown && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
+              <div className="mt-2 p-2 rounded-2xl bg-[#14152c] border border-purple-500/30 shadow-2xl relative z-40 flex flex-wrap gap-1.5">
+                {openDropdown === 'price' &&
+                  ([
+                    { val: 'all', label: 'All Prices' },
+                    { val: 'under-15k', label: 'Under ₹15,000' },
+                    { val: '15k-35k', label: '₹15,000 – ₹35,000' },
+                    { val: 'above-35k', label: 'Above ₹35,000' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.val}
+                      type="button"
+                      onClick={() => {
+                        setPriceFilter(opt.val);
+                        setOpenDropdown(null);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
+                        priceFilter === opt.val
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-[#1b1c38] text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                {openDropdown === 'rating' &&
+                  ([
+                    { val: 0, label: 'Any Rating' },
+                    { val: 4.5, label: '4.5★ & Above' },
+                    { val: 4.8, label: '4.8★ & Above' },
+                    { val: 4.9, label: '4.9★ Top Rated' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.val}
+                      type="button"
+                      onClick={() => {
+                        setRatingFilter(opt.val);
+                        setOpenDropdown(null);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
+                        ratingFilter === opt.val
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-[#1b1c38] text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                {openDropdown === 'delivery' &&
+                  ([
+                    { val: 'all', label: 'All Delivery Timelines' },
+                    { val: 'fast', label: 'Express Delivery (≤ 7 Days)' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.val}
+                      type="button"
+                      onClick={() => {
+                        setDeliveryFilter(opt.val);
+                        setOpenDropdown(null);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
+                        deliveryFilter === opt.val
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-[#1b1c38] text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                {openDropdown === 'sort' &&
+                  ([
+                    { val: 'relevance', label: 'Relevance' },
+                    { val: 'price-asc', label: 'Price: Low to High' },
+                    { val: 'price-desc', label: 'Price: High to Low' },
+                    { val: 'rating-desc', label: 'Highest Rated' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.val}
+                      type="button"
+                      onClick={() => {
+                        setSortBy(opt.val);
+                        setOpenDropdown(null);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
+                        sortBy === opt.val
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-[#1b1c38] text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Results Count & View Mode Row */}
@@ -487,6 +564,61 @@ export default function SearchPage() {
             <div className="py-20 text-center text-xs text-gray-400">
               No services found matching your search.
             </div>
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-2 gap-3">
+              {filteredResults.map((item) => (
+                <div
+                  key={item.id}
+                  className="group relative rounded-[22px] bg-[#121326] border border-purple-500/20 hover:border-purple-400/50 shadow-xl overflow-hidden transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-[#1a0f35] to-[#0d071d] overflow-hidden">
+                      <Link href={`/services/${item.slug}`} className="block w-full h-full">
+                        <Image
+                          src={item.imageSrc}
+                          alt={item.title}
+                          fill
+                          className="object-cover transition-transform group-hover:scale-105"
+                          unoptimized
+                        />
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={(e) => toggleWishlist(item.id, e)}
+                        aria-label="Wishlist"
+                        className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all cursor-pointer"
+                      >
+                        <Heart
+                          className={`w-3.5 h-3.5 transition-colors ${
+                            wishlist[item.id] ? 'fill-pink-500 text-pink-500' : 'text-gray-300'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <Link href={`/services/${item.slug}`} className="block p-3">
+                      <h2 className="font-bold text-white text-xs sm:text-sm leading-snug line-clamp-2 group-hover:text-purple-300 transition-colors">
+                        {item.title}
+                      </h2>
+                      <p className="mt-1 text-[11px] text-purple-200/70 line-clamp-2 leading-relaxed">
+                        {item.description}
+                      </p>
+                    </Link>
+                  </div>
+                  <div className="px-3 pb-3 pt-2 border-t border-purple-500/15 flex items-center justify-between">
+                    <div>
+                      <span className="text-[9px] text-gray-400 block leading-none">Starting at</span>
+                      <span className="text-xs sm:text-sm font-extrabold text-white">
+                        {item.price > 0 ? `₹${item.price.toLocaleString('en-IN')}` : 'Custom Quote'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-0.5 text-[11px] font-bold text-white">
+                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                      <span>{item.rating > 0 ? item.rating : 'New'}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             filteredResults.map((item) => (
             <div
@@ -495,13 +627,15 @@ export default function SearchPage() {
             >
               {/* Left Thumbnail */}
               <div className="relative w-full sm:w-44 h-36 sm:h-auto bg-gradient-to-br from-[#1a0f35] to-[#0d071d] flex items-center justify-center overflow-hidden flex-shrink-0">
-                <Image
-                  src={item.imageSrc}
-                  alt={item.title}
-                  width={200}
-                  height={120}
-                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                />
+                <Link href={`/services/${item.slug}`} className="block w-full h-full">
+                  <Image
+                    src={item.imageSrc}
+                    alt={item.title}
+                    width={200}
+                    height={120}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                  />
+                </Link>
 
                 {/* Wishlist Heart */}
                 <button
@@ -520,7 +654,7 @@ export default function SearchPage() {
 
               {/* Right Details Block */}
               <div className="p-3.5 flex-1 flex flex-col justify-between">
-                <div>
+                <Link href={`/services/${item.slug}`} className="block">
                   <h2 className="font-bold text-white text-sm sm:text-base leading-snug group-hover:text-purple-300 transition-colors">
                     {item.title}
                   </h2>
@@ -542,7 +676,7 @@ export default function SearchPage() {
                       )}
                     </div>
                   </div>
-                </div>
+                </Link>
 
                 {/* Price & CTA Button */}
                 <div className="mt-3.5 pt-2.5 border-t border-purple-500/15 flex items-center justify-between">

@@ -25,11 +25,11 @@ interface CategoryItem {
 
 const ALL_SYSTEMS_TILE: CategoryItem = {
   id: 'all',
-  name: 'All Systems',
+  name: 'All Categories',
   slug: 'all',
-  icon: <LayoutGrid className="w-5 h-5 text-white" />,
+  icon: <LayoutGrid className="w-5 h-5 text-purple-300" />,
   href: '/categories',
-  isActive: true,
+  isActive: false,
 };
 
 export default function CategoryGrid() {

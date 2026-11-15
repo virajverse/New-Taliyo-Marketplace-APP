@@ -13,6 +13,8 @@ import {
   User,
   CheckCircle2,
   ShieldCheck,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -32,21 +34,26 @@ function LoginPageContent() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToastType(type);
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3500);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
     if (!password || password.length < 6) {
-      showToast('Password must be at least 6 characters.');
+      showToast('Password must be at least 6 characters.', 'error');
       return;
     }
 
+    setIsSubmitting(true);
     try {
       if (mode === 'signup') {
         const res = await fetch('/api/auth/signup', {
@@ -69,7 +76,8 @@ function LoginPageContent() {
         showToast(
           isCheckoutRedirect
             ? 'Account created! Returning to checkout...'
-            : 'Account created successfully! Welcome!'
+            : 'Account created successfully! Welcome!',
+          'success',
         );
         setTimeout(() => router.replace(safeNext), 800);
       } else {
@@ -81,13 +89,15 @@ function LoginPageContent() {
         showToast(
           isCheckoutRedirect
             ? 'Signed in! Returning to checkout...'
-            : 'Welcome back! Logging you in...'
+            : 'Welcome back! Logging you in...',
+          'success',
         );
         setTimeout(() => router.replace(safeNext), 800);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Authentication failed';
-      showToast(msg);
+      showToast(msg, 'error');
+      setIsSubmitting(false);
     }
   };
 
@@ -103,7 +113,7 @@ function LoginPageContent() {
       if (error) throw error;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'OAuth sign-in failed';
-      showToast(msg);
+      showToast(msg, 'error');
     }
   };
 
@@ -112,8 +122,18 @@ function LoginPageContent() {
       {/* Light Glassmorphic Toast Notification */}
       {toastMsg && (
         <div className="fixed top-16 inset-x-0 z-50 flex justify-center px-4 animate-in fade-in slide-in-from-top-3 duration-250 pointer-events-none">
-          <div className="bg-[#0b0d1e]/80 backdrop-blur-xl border border-emerald-500/20 text-emerald-200 text-xs font-medium px-3.5 py-1.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.5),0_0_10px_rgba(16,185,129,0.1)] flex items-center gap-2 pointer-events-auto transition-all">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <div
+            className={`bg-[#0b0d1e]/90 backdrop-blur-xl text-xs font-medium px-3.5 py-2 rounded-full shadow-lg flex items-center gap-2 pointer-events-auto transition-all border ${
+              toastType === 'error'
+                ? 'border-rose-500/40 text-rose-200'
+                : 'border-emerald-500/30 text-emerald-200'
+            }`}
+          >
+            {toastType === 'error' ? (
+              <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            )}
             <span className="leading-tight">{toastMsg}</span>
           </div>
         </div>
@@ -304,9 +324,19 @@ function LoginPageContent() {
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-sm font-bold shadow-lg shadow-fuchsia-600/30 hover:opacity-95 transition-all cursor-pointer"
+              disabled={isSubmitting}
+              className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-sm font-bold shadow-lg shadow-fuchsia-600/30 hover:opacity-95 disabled:opacity-60 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              {mode === 'login' ? 'Login' : 'Create Account'}
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>
+                {isSubmitting
+                  ? mode === 'login'
+                    ? 'Signing in...'
+                    : 'Creating Account...'
+                  : mode === 'login'
+                  ? 'Login'
+                  : 'Create Account'}
+              </span>
             </button>
           </form>
 

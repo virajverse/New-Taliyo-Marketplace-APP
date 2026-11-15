@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -10,6 +10,8 @@ import {
   Send,
   ShieldCheck,
   CheckCircle2,
+  AlertCircle,
+  Lock,
   LogIn,
   KeyRound,
 } from 'lucide-react';
@@ -20,10 +22,30 @@ export default function ResetPasswordPage() {
 
   const [email, setEmail] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
-  const showToast = (msg: string) => {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('mode') === 'update' || window.location.hash.includes('type=recovery')) {
+        setIsRecoveryMode(true);
+      }
+    }
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveryMode(true);
+      }
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToastType(type);
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3500);
   };
@@ -35,14 +57,38 @@ export default function ResetPasswordPage() {
     setIsLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+        redirectTo: `${window.location.origin}/auth/callback?type=recovery&next=/reset-password?mode=update`,
       });
       if (error) throw error;
       setIsSubmitted(true);
-      showToast(`Password reset link dispatched to ${email}`);
+      showToast(`Password reset link sent to ${email}`, 'success');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to dispatch reset link';
-      showToast(msg);
+      const msg = err instanceof Error ? err.message : 'Failed to send reset link';
+      showToast(msg, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      showToast('Password must be at least 6 characters long.', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('Passwords do not match.', 'error');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      showToast('Password updated successfully! Redirecting...', 'success');
+      setTimeout(() => router.replace('/profile'), 1000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update password';
+      showToast(msg, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -53,8 +99,18 @@ export default function ResetPasswordPage() {
       {/* Light Glassmorphic Toast Notification */}
       {toastMsg && (
         <div className="fixed top-16 inset-x-0 z-50 flex justify-center px-4 animate-in fade-in slide-in-from-top-3 duration-250 pointer-events-none">
-          <div className="bg-[#0b0d1e]/80 backdrop-blur-xl border border-emerald-500/20 text-emerald-200 text-xs font-medium px-3.5 py-1.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.5),0_0_10px_rgba(16,185,129,0.1)] flex items-center gap-2 pointer-events-auto transition-all">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <div
+            className={`bg-[#0b0d1e]/90 backdrop-blur-xl text-xs font-medium px-3.5 py-2 rounded-full shadow-lg flex items-center gap-2 pointer-events-auto transition-all border ${
+              toastType === 'error'
+                ? 'border-rose-500/40 text-rose-200'
+                : 'border-emerald-500/30 text-emerald-200'
+            }`}
+          >
+            {toastType === 'error' ? (
+              <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            )}
             <span className="leading-tight">{toastMsg}</span>
           </div>
         </div>
@@ -104,14 +160,52 @@ export default function ResetPasswordPage() {
 
           <div>
             <h2 className="text-xl font-extrabold text-white tracking-tight">
-              Reset Password
+              {isRecoveryMode ? 'Set New Password' : 'Reset Password'}
             </h2>
             <p className="text-xs text-purple-200/80 mt-1.5 leading-relaxed max-w-xs mx-auto">
-              Enter your email address and we&apos;ll send you a link to create a new password.
+              {isRecoveryMode
+                ? 'Enter and confirm your new password below to secure your account.'
+                : "Enter your email address and we'll send you a link to create a new password."}
             </p>
           </div>
 
-          {!isSubmitted ? (
+          {isRecoveryMode ? (
+            <form onSubmit={handleUpdatePassword} className="w-full flex flex-col gap-3.5 mt-1 text-left">
+              <div className="relative w-full">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-purple-300">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password (min. 6 characters)"
+                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-[#14122e]/85 border border-purple-500/30 text-white placeholder:text-gray-400 text-xs sm:text-sm focus:outline-none focus:border-purple-400"
+                  required
+                />
+              </div>
+              <div className="relative w-full">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-purple-300">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-[#14122e]/85 border border-purple-500/30 text-white placeholder:text-gray-400 text-xs sm:text-sm focus:outline-none focus:border-purple-400"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#8324e9] via-[#9e27ee] to-[#bd2ef3] text-white text-xs sm:text-sm font-bold shadow-[0_0_25px_rgba(168,85,247,0.45)] hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+              >
+                <span>{isLoading ? 'Updating Password...' : 'Save New Password'}</span>
+              </button>
+            </form>
+          ) : !isSubmitted ? (
             <form onSubmit={handleSendLink} className="w-full flex flex-col gap-3.5 mt-1">
               <div className="relative w-full">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-purple-300">

@@ -43,11 +43,18 @@ export default function CategoriesPage() {
       (json) => {
         const data = Array.isArray(json?.data) ? json.data : [];
         if (data.length > 0) {
+          const getCategoryTag = (name: string) => {
+            const lower = name.toLowerCase();
+            if (lower.includes('ai') || lower.includes('auto') || lower.includes('bot')) return 'AI & Automation';
+            if (lower.includes('web') || lower.includes('app') || lower.includes('saas') || lower.includes('software')) return 'Web & Apps';
+            if (lower.includes('design') || lower.includes('brand') || lower.includes('growth') || lower.includes('market') || lower.includes('seo')) return 'Growth & Design';
+            return 'Digital Systems';
+          };
           const mapped: CategoryCard[] = data.map((cat, idx) => ({
             id: cat.id,
             name: cat.name,
             description: cat.description || 'End-to-end software development and deployment.',
-            filterTag: 'Systems',
+            filterTag: getCategoryTag(cat.name),
             slug: cat.slug || cat.id,
             imageSrc: images[idx % images.length],
           }));
@@ -79,7 +86,7 @@ export default function CategoriesPage() {
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
         {/* Sticky Header */}
         <header className="sticky top-0 z-40 w-full bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
           <div>
@@ -135,8 +142,27 @@ export default function CategoriesPage() {
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <Loader2 className="w-8 h-8 text-fuchsia-400 animate-spin" />
               <p className="text-xs text-purple-200/60 font-medium">
-                Loading categories from Supabase...
+                Loading categories...
               </p>
+            </div>
+          ) : filteredCategories.length === 0 ? (
+            <div className="rounded-[22px] bg-[#111226]/90 border border-purple-500/20 p-8 text-center space-y-3 my-6">
+              <p className="text-sm font-bold text-white">No matching categories found</p>
+              <p className="text-xs text-gray-400">
+                Try searching with a different keyword or switching the filter tab.
+              </p>
+              {(searchQuery || activeFilter !== 'All') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setActiveFilter('All');
+                  }}
+                  className="px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Reset Filters
+                </button>
+              )}
             </div>
           ) : (
             filteredCategories.map((cat) => (

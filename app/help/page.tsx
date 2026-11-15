@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronUp,
   Headphones,
+  MessageCircle,
   X,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
@@ -37,14 +38,14 @@ const FAQS: FAQItem[] = [
     category: 'payments',
     question: 'What payment methods do you support?',
     answer:
-      'We support all major payment options across India and globally, including UPI (GPay, PhonePe, Paytm), Credit & Debit cards (Visa, Mastercard, RuPay), Net Banking, and Taliyo Marketplace Credits.',
+      'We support 0% convenience fee UPI payments (GPay, PhonePe, Paytm, BHIM via QR code or direct UPI app launch), a 30% Advance Milestone Payment option, and direct Bank NEFT / IMPS transfers with instant UTR verification.',
   },
   {
     id: 'faq-3',
     category: 'orders',
     question: 'How can I track my order?',
     answer:
-      'Navigate to "My Orders" from the bottom navigation dock. Click on your active project to view the live Order Milestone Tracker, deliverable checklists, and chat with your assigned team lead.',
+      'Navigate to "My Orders" from the bottom navigation dock. Click on your active project to view the live Order Milestone Tracker, deliverable stages, and direct WhatsApp support with your team.',
   },
   {
     id: 'faq-4',
@@ -56,16 +57,16 @@ const FAQS: FAQItem[] = [
   {
     id: 'faq-5',
     category: 'account',
-    question: 'How do I change my registered email or phone?',
+    question: 'How do I update my profile name, phone or avatar?',
     answer:
-      'Go to "My Profile" > "Account Details". Click on Edit Profile to update your full name, email address, or phone number with instant OTP verification.',
+      'Go to "My Profile" and tap the "Edit Profile" button in the top right to update your Full Name, Contact Phone Number, or Avatar. For security reasons, your registered login email is locked and can be updated via Customer Support.',
   },
   {
     id: 'faq-6',
     category: 'services',
     question: 'Can I request a custom feature not listed in plans?',
     answer:
-      'Absolutely! Try our Solution Advisor or reach out via Customer Support or WhatsApp with your requirements to receive a tailored proposal quickly.',
+      'Absolutely! Reach out via Customer Support or direct WhatsApp with your project requirements to receive a tailored architecture and pricing proposal quickly.',
   },
 ];
 
@@ -212,7 +213,27 @@ export default function HelpFAQPage() {
           </div>
 
           <div className="flex flex-col gap-2.5">
-            {visibleFaqs.map((faq) => {
+            {visibleFaqs.length === 0 ? (
+              <div className="rounded-2xl bg-[#0f1123]/90 border border-purple-500/15 p-6 text-center space-y-2.5">
+                <p className="text-sm font-bold text-white">No matching FAQs found</p>
+                <p className="text-xs text-gray-400">
+                  Try searching with a different keyword or contact our support team below.
+                </p>
+                {(searchQuery || selectedCategory !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedCategory('all');
+                    }}
+                    className="px-4 py-1.5 rounded-full bg-purple-600 text-white text-xs font-bold cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+            visibleFaqs.map((faq) => {
               const isExpanded = expandedId === faq.id;
               return (
                 <div
@@ -246,32 +267,43 @@ export default function HelpFAQPage() {
                   )}
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
 
-        {/* Still Need Help? CTA Banner */}
-        <div className="relative overflow-hidden rounded-[26px] bg-gradient-to-r from-[#210d44]/90 via-[#160a33]/90 to-[#0c0d1e]/90 border border-purple-500/25 p-5 shadow-[0_12px_36px_rgba(0,0,0,0.55)] flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5 min-w-0">
+        {/* Still Need Help? Action Banner */}
+        <div className="relative overflow-hidden rounded-[26px] bg-gradient-to-r from-[#210d44]/90 via-[#160a33]/90 to-[#0c0d1e]/90 border border-purple-500/25 p-5 shadow-[0_12px_36px_rgba(0,0,0,0.55)] flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0 w-full sm:w-auto">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-fuchsia-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-fuchsia-600/30">
               <Headphones className="w-6 h-6" />
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
-                Still need help?
+                Need personalized help?
               </h3>
               <p className="text-xs text-gray-300/80 mt-0.5 leading-tight">
-                Mon - Sat, 10:00 AM - 7:00 PM (IST) + WhatsApp.
+                Connect directly with our team on WhatsApp or Support Desk.
               </p>
             </div>
           </div>
 
-          <Link
-            href="/support"
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-xs font-bold shadow-md shadow-fuchsia-600/30 hover:opacity-95 transition-all shrink-0"
-          >
-            Contact Support
-          </Link>
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            <a
+              href="https://wa.me/917042523611?text=Hi%20Taliyo%20Support!%20I%20have%20a%20question%20from%20the%20Help%20Center."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1.5"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
+            </a>
+            <Link
+              href="/support"
+              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-xs font-bold shadow-md hover:opacity-95 transition-all text-center"
+            >
+              Support Desk
+            </Link>
+          </div>
         </div>
       </main>
 

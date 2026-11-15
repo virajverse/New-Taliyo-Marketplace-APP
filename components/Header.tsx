@@ -3,15 +3,18 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Bell, ShoppingBag, Download } from 'lucide-react';
+import { Bell, ShoppingBag, Download, Heart, UserCheck, LogIn } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { usePwaInstall } from '@/components/PwaInstallProvider';
 import { subscribeSmartFetch } from '@/lib/clientCache';
+import { fetchSavedWishlistServiceIds } from '@/lib/wishlistClient';
 
 export default function Header() {
   const { canInstallNative, isIos, isInstalled, triggerInstall } = usePwaInstall();
   const [cartCount, setCartCount] = useState(0);
-  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+  const [wishlistCount, setWishlistCount] = useState(0);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [userName, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
     const syncCart = () => {
@@ -29,6 +32,15 @@ export default function Header() {
       }
     };
 
+    const syncWishlist = async () => {
+      try {
+        const { serviceIds } = await fetchSavedWishlistServiceIds();
+        setWishlistCount(serviceIds.length);
+      } catch {
+        setWishlistCount(0);
+      }
+    };
+
     let unsubNotifications: (() => void) | undefined;
     let disposed = false;
 
@@ -40,9 +52,17 @@ export default function Header() {
         } = await supabase.auth.getUser();
         if (user) {
           uid = user.id;
+          const metaName =
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            user.email?.split('@')[0] ||
+            'Member';
+          setUserName(String(metaName).trim().split(' ')[0]);
+        } else {
+          setUserName(null);
         }
       } catch {
-        // ignore guest auth lookup
+        setUserName(null);
       }
 
       if (disposed) return;
@@ -52,24 +72,27 @@ export default function Header() {
         'notifications',
         (json) => {
           const list = Array.isArray(json?.data) ? json.data : [];
-          setHasUnreadNotifications(list.some((n) => n.is_read === false));
+          setUnreadNotificationsCount(list.filter((n) => n.is_read === false).length);
         },
-        { onError: () => setHasUnreadNotifications(false) },
+        { onError: () => setUnreadNotificationsCount(0) },
       );
     };
 
     syncCart();
+    void syncWishlist();
     void loadUserAndNotifications();
 
     window.addEventListener('storage', syncCart);
     window.addEventListener('focus', syncCart);
     window.addEventListener('taliyo_cart_updated', syncCart);
+    window.addEventListener('taliyo_wishlist_updated', syncWishlist);
     return () => {
       disposed = true;
       unsubNotifications?.();
       window.removeEventListener('storage', syncCart);
       window.removeEventListener('focus', syncCart);
       window.removeEventListener('taliyo_cart_updated', syncCart);
+      window.removeEventListener('taliyo_wishlist_updated', syncWishlist);
     };
   }, []);
 
@@ -115,6 +138,39 @@ export default function Header() {
           </button>
         )}
 
+        {/* Account / Login Status Pill */}
+        <Link
+          href={userName ? '/profile' : '/login'}
+          aria-label={userName ? `Signed in as ${userName}` : 'Sign In'}
+          className="hidden xs:inline-flex sm:inline-flex h-9 px-2.5 rounded-full bg-[#15162a]/90 border border-purple-500/20 items-center gap-1.5 text-[11px] font-bold text-gray-200 hover:text-white hover:border-purple-500/50 transition-all"
+        >
+          {userName ? (
+            <>
+              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="max-w-[72px] truncate">{userName}</span>
+            </>
+          ) : (
+            <>
+              <LogIn className="w-3.5 h-3.5 text-purple-400" />
+              <span>Sign In</span>
+            </>
+          )}
+        </Link>
+
+        {/* Wishlist */}
+        <Link
+          href="/wishlist"
+          aria-label="Saved Services Wishlist"
+          className="relative w-9 h-9 rounded-full bg-[#15162a]/90 border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/50 hover:bg-[#1f203d] transition-all shadow-sm cursor-pointer"
+        >
+          <Heart className="w-4 h-4" />
+          {wishlistCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-rose-500 text-[10px] font-black text-white flex items-center justify-center shadow-lg shadow-rose-600/50 ring-2 ring-[#080811]">
+              {wishlistCount}
+            </span>
+          )}
+        </Link>
+
         {/* Notifications */}
         <Link
           href="/notifications"
@@ -122,8 +178,10 @@ export default function Header() {
           className="relative w-9 h-9 rounded-full bg-[#15162a]/90 border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/50 hover:bg-[#1f203d] transition-all shadow-sm cursor-pointer"
         >
           <Bell className="w-4 h-4" />
-          {hasUnreadNotifications && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-pink-500 ring-2 ring-[#080811]" />
+          {unreadNotificationsCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-gradient-to-r from-fuchsia-500 to-pink-500 text-[10px] font-black text-white flex items-center justify-center shadow-lg shadow-pink-600/50 ring-2 ring-[#080811]">
+              {unreadNotificationsCount}
+            </span>
           )}
         </Link>
 

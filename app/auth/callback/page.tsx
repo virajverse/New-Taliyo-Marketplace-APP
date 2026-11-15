@@ -18,7 +18,13 @@ function AuthCallbackContent() {
     async function handleAuth() {
       try {
         const nextParam = searchParams.get('next') || '/profile';
-        const safeNext = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/profile';
+        const typeParam = searchParams.get('type');
+        const resolvedNext =
+          typeParam === 'recovery' ? '/reset-password?mode=update' : nextParam;
+        const safeNext =
+          resolvedNext.startsWith('/') && !resolvedNext.startsWith('//')
+            ? resolvedNext
+            : '/profile';
         const isCheckout = safeNext.startsWith('/checkout');
 
         // 1. Check existing session
@@ -63,9 +69,13 @@ function AuthCallbackContent() {
         const timer = setTimeout(() => {
           if (isMounted && status === 'loading') {
             const type = searchParams.get('type');
-            if (type === 'signup' || type === 'recovery') {
+            if (type === 'recovery') {
               setStatus('success');
-              setMessage('Email action verified! Redirecting to login...');
+              setMessage('Recovery verified! Redirecting to set new password...');
+              setTimeout(() => router.replace('/reset-password?mode=update'), 1000);
+            } else if (type === 'signup') {
+              setStatus('success');
+              setMessage('Email verified! Redirecting to login...');
               setTimeout(() => router.replace('/login'), 1200);
             } else {
               setStatus('error');

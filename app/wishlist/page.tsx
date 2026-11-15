@@ -12,7 +12,7 @@ import {
   Heart,
   Star,
   ShoppingBag,
-  Plus,
+  ArrowRight,
   CheckCircle2,
   X,
 } from 'lucide-react';
@@ -404,11 +404,13 @@ export default function WishlistPage() {
             )}
           </div>
 
-          {/* Sub-bar: Items Count & Sort Pill */}
+          {/* Sub-bar: Filter Info & Sort Pill */}
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-semibold text-gray-400 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-fuchsia-500" />
-              {filteredItems.length} Items Saved
+              {searchQuery
+                ? `Showing ${filteredItems.length} of ${items.length} saved`
+                : 'Saved for quick comparison & booking'}
             </span>
 
             {/* Sort Dropdown Pill */}
@@ -419,29 +421,35 @@ export default function WishlistPage() {
                 className="px-3 py-1.5 rounded-full bg-[#121429] border border-purple-500/20 text-xs font-semibold text-purple-300 hover:border-purple-500/40 hover:bg-[#181a33] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <span>Sort: {sortLabels[sortBy]}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-purple-400" />
+                <ChevronDown className={`w-3.5 h-3.5 text-purple-400 transition-transform ${isSortDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isSortDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-48 rounded-2xl bg-[#0f1124] border border-purple-500/30 p-1.5 shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150">
-                  {(['recent', 'price-asc', 'price-desc', 'rating-desc'] as SortOption[]).map((opt) => (
-                    <button
-                      key={opt}
-                      onClick={() => {
-                        setSortBy(opt);
-                        setIsSortDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                        sortBy === opt
-                          ? 'bg-purple-600/30 text-fuchsia-300 font-bold'
-                          : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                      }`}
-                    >
-                      <span>{sortLabels[opt]}</span>
-                      {sortBy === opt && <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400" />}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setIsSortDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1.5 w-48 rounded-2xl bg-[#0f1124] border border-purple-500/30 p-1.5 shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150">
+                    {(['recent', 'price-asc', 'price-desc', 'rating-desc'] as SortOption[]).map((opt) => (
+                      <button
+                        key={opt}
+                        onClick={() => {
+                          setSortBy(opt);
+                          setIsSortDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
+                          sortBy === opt
+                            ? 'bg-purple-600/30 text-fuchsia-300 font-bold'
+                            : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        <span>{sortLabels[opt]}</span>
+                        {sortBy === opt && <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -475,7 +483,10 @@ export default function WishlistPage() {
               >
                 <div className="flex gap-3 sm:gap-4">
                   {/* Thumbnail on Left with Badge */}
-                  <div className="relative w-28 sm:w-32 h-28 sm:h-32 rounded-2xl overflow-hidden shrink-0 border border-purple-500/20 bg-[#161833]">
+                  <Link
+                    href={`/services/${item.slug}`}
+                    className="relative w-28 sm:w-32 h-28 sm:h-32 rounded-2xl overflow-hidden shrink-0 border border-purple-500/20 bg-[#161833] block"
+                  >
                     <Image
                       src={item.thumbnail}
                       alt={item.title}
@@ -492,7 +503,7 @@ export default function WishlistPage() {
                         {item.badge}
                       </span>
                     </div>
-                  </div>
+                  </Link>
 
                   {/* Content on Right */}
                   <div className="flex-1 min-w-0 flex flex-col justify-between">
@@ -552,13 +563,13 @@ export default function WishlistPage() {
                           <span>Add to Cart</span>
                         </button>
 
-                        {/* Book Plan Button */}
+                        {/* View Details Button */}
                         <Link
                           href={`/services/${item.slug}`}
                           className="px-3 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-xs font-bold shadow-md shadow-fuchsia-600/30 hover:opacity-95 transition-all flex items-center gap-1 shrink-0"
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Book Plan</span>
+                          <span>View Details</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
                         </Link>
                       </div>
                     </div>

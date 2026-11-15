@@ -29,7 +29,7 @@ export default function AiAdvisorCard() {
           <div className="flex items-center gap-1.5 flex-wrap mb-1">
             <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-900/60 border border-purple-400/40 text-purple-200 text-[10px] font-bold shadow-sm">
               <Cpu className="w-2.5 h-2.5 text-fuchsia-400" />
-              <span>Project Advisor</span>
+              <span>AI Project Advisor</span>
             </div>
             <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[9px] font-extrabold uppercase tracking-wider">
               Coming Soon
@@ -37,11 +37,11 @@ export default function AiAdvisorCard() {
           </div>
 
           <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight leading-snug group-hover:text-purple-300 transition-colors">
-            Solution Architect
+            AI Project Advisor
           </h3>
 
           <p className="mt-0.5 text-[11px] sm:text-xs text-purple-200/70 line-clamp-2 leading-relaxed">
-            Coming soon — meanwhile explore systems or connect on WhatsApp for instant planning.
+            Get instant architecture & budget recommendations, or connect on WhatsApp for custom planning.
           </p>
         </div>
 

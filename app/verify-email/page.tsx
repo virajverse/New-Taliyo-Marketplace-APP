@@ -78,8 +78,15 @@ export default function VerifyEmailPage() {
   };
 
   const handleOpenEmail = () => {
-    showToast('Opening default email application...');
-    window.open(`mailto:${email}`, '_blank');
+    const domain = email.includes('@') ? email.split('@')[1]?.toLowerCase() : '';
+    let inboxUrl = 'https://mail.google.com';
+    if (domain?.includes('outlook') || domain?.includes('hotmail') || domain?.includes('live')) {
+      inboxUrl = 'https://outlook.live.com/mail/';
+    } else if (domain?.includes('yahoo')) {
+      inboxUrl = 'https://mail.yahoo.com';
+    }
+    showToast('Opening your email inbox...');
+    window.open(inboxUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -133,7 +140,7 @@ export default function VerifyEmailPage() {
             Taliyo Marketplace
           </h1>
           <p className="text-xs text-gray-400 tracking-wider uppercase font-semibold mt-1">
-            Shop Smart • Live Better
+            Digital Services &amp; Systems Marketplace
           </p>
         </div>
 

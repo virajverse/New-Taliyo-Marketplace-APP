@@ -96,6 +96,8 @@ export default function OrderMilestoneTrackerPage() {
               : `₹${booking.service_price}`
             : 'Verified Custom Plan';
 
+          const isCancelledOrder = String(booking.status || '').toLowerCase() === 'cancelled';
+
           setBookingInfo({
             id: booking.id,
             orderNumber: `#TLY${booking.id.slice(0, 6).toUpperCase()}`,
@@ -103,7 +105,7 @@ export default function OrderMilestoneTrackerPage() {
             planName: cleanPrice,
             provider: booking.provider_name || 'Taliyo Technologies',
             startedDate: started,
-            targetDate: '10–14 Days',
+            targetDate: isCancelledOrder ? 'Cancelled' : '10–14 Days',
             status: booking.status || 'pending',
           });
 
@@ -114,6 +116,14 @@ export default function OrderMilestoneTrackerPage() {
             label?: string;
             step_key?: string;
           }>;
+
+          const stageDescriptions = [
+            'Order scope, requirements, and payment details verified by the project team.',
+            'System architecture, database schema, and UI/UX wireframes prepared.',
+            'Core modules, frontend interface, and backend APIs built in sprint.',
+            'End-to-end quality assurance, device testing, and security checks completed.',
+            'Live cloud deployment and 100% source code repository handover.',
+          ];
 
           if (steps && steps.length > 0) {
             const rawStatus = String(booking.status || 'pending').toLowerCase();
@@ -154,7 +164,7 @@ export default function OrderMilestoneTrackerPage() {
               return {
                 id: idx + 1,
                 title: s.label || (s.step_key || 'milestone').replace('_', ' ').toUpperCase(),
-                description: `Verified milestone stage: ${s.label}`,
+                description: stageDescriptions[idx] || `Project milestone delivery stage: ${s.label}`,
                 status: st,
                 dateLabel,
               };
@@ -180,7 +190,7 @@ export default function OrderMilestoneTrackerPage() {
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
         {/* Sticky Top Header */}
         <header className="sticky top-0 z-40 w-full bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -326,53 +336,61 @@ export default function OrderMilestoneTrackerPage() {
               <div className="flex items-center gap-1.5 text-gray-400">
                 <Calendar className="w-3.5 h-3.5 text-fuchsia-400" />
                 <div>
-                  <span className="text-gray-400 block leading-tight">Started</span>
+                  <span className="text-gray-400 block leading-tight">Booked On</span>
                   <span className="font-bold text-white leading-tight">{bookingInfo.startedDate}</span>
                 </div>
               </div>
 
               <div className="w-[1px] h-6 bg-purple-500/20" />
 
-              <div className="flex items-center gap-1.5 text-gray-400">
-                <Clock className="w-3.5 h-3.5 text-cyan-400" />
+              <div className="flex items-center gap-1.5 text-gray-400 text-right">
                 <div>
-                  <span className="text-gray-400 block leading-tight">Timeline</span>
+                  <span className="text-gray-400 block leading-tight">Est. Timeline</span>
                   <span className="font-bold text-white leading-tight">{bookingInfo.targetDate}</span>
                 </div>
-              </div>
-
-              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-950/70 border border-amber-500/40 text-amber-300 font-extrabold text-[10px] uppercase">
-                <Hourglass className="w-3 h-3 text-amber-400" />
-                <span>{bookingInfo.status.replace('_', ' ')}</span>
+                <Clock className="w-3.5 h-3.5 text-cyan-400" />
               </div>
             </div>
           </div>
 
           {/* Overall Progress Card */}
-          <div className="rounded-[22px] bg-[#121326]/95 border border-purple-500/20 p-4 shadow-lg space-y-2.5">
-            <div className="flex items-center justify-between">
+          {bookingInfo.status.toLowerCase() === 'cancelled' ? (
+            <div className="rounded-[22px] bg-rose-950/30 border border-rose-500/30 p-4 shadow-lg flex items-center justify-between">
               <div>
-                <span className="text-xs font-bold text-white block">
-                  Overall Progress
+                <span className="text-xs font-bold text-rose-300 block">
+                  Order Cancelled
                 </span>
-                <span className="text-[10px] text-purple-200/60 block mt-0.5">
-                  {completedCount} of {milestones.length} Milestones Completed
+                <span className="text-[11px] text-rose-200/70 block mt-0.5">
+                  This booking was cancelled and milestone work has been stopped.
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[22px] bg-[#121326]/95 border border-purple-500/20 p-4 shadow-lg space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    Overall Progress
+                  </span>
+                  <span className="text-[10px] text-purple-200/60 block mt-0.5">
+                    {completedCount} of {milestones.length} Milestones Completed
+                  </span>
+                </div>
+
+                <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 via-pink-300 to-white">
+                  {progressPercentage}%
                 </span>
               </div>
 
-              <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 via-pink-300 to-white">
-                {progressPercentage}%
-              </span>
+              {/* Glowing Gradient Progress Bar */}
+              <div className="w-full h-2 rounded-full bg-[#1b1035] overflow-hidden p-0.5">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-pink-500 rounded-full shadow-[0_0_15px_rgba(217,70,239,0.5)] transition-all duration-700"
+                  style={{ width: `${progressPercentage}%` }}
+                />
+              </div>
             </div>
-
-            {/* Glowing Gradient Progress Bar */}
-            <div className="w-full h-2 rounded-full bg-[#1b1035] overflow-hidden p-0.5">
-              <div
-                className="h-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-pink-500 rounded-full shadow-[0_0_15px_rgba(217,70,239,0.5)] transition-all duration-700"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </div>
-          </div>
+          )}
 
           {/* Vertical Milestones Timeline */}
           <div className="space-y-3 pt-1">
@@ -451,7 +469,7 @@ export default function OrderMilestoneTrackerPage() {
           {/* Quick Actions Strip */}
           <div className="pt-2 grid grid-cols-2 gap-2.5">
             <Link
-              href="/support"
+              href={`/support?orderId=${encodeURIComponent(bookingInfo.orderNumber)}&title=${encodeURIComponent(bookingInfo.title)}`}
               className="py-3 px-3 rounded-2xl bg-[#14102c] border border-purple-500/25 hover:border-purple-400 text-purple-200 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
             >
               <MessageSquare className="w-4 h-4 text-fuchsia-400" />

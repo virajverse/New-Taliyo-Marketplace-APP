@@ -9,7 +9,7 @@ import {
   Check,
   User,
   Moon,
-  Download,
+  RotateCcw,
   Headphones,
   LogOut,
   ChevronRight,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import { supabase } from '@/lib/supabaseClient';
+import { invalidateClientCache } from '@/lib/clientCache';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -27,6 +28,11 @@ export default function SettingsPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string>('');
   const [cachedKeyCount, setCachedKeyCount] = useState<number>(0);
+
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [isLogoutOpen, setIsLogoutOpen] = useState(false);
@@ -41,9 +47,8 @@ export default function SettingsPage() {
       try {
         if (typeof window === 'undefined') return;
         const keys = [
-          'taliyo_cart',
-          'taliyo_guest_wishlist',
           'taliyo_dismissed_notifications',
+          'taliyo_checkout_draft',
           'taliyo_saved_addresses',
           'taliyo_saved_payments',
         ];
@@ -64,17 +69,20 @@ export default function SettingsPage() {
           setCurrentUserEmail(user.email);
           const { data: profile } = await supabase
             .from('profiles')
-            .select('name')
+            .select('name, phone')
             .eq('id', user.id)
             .maybeSingle();
 
-          if (profile?.name) {
-            setCurrentUserName(profile.name);
-          } else if (user.user_metadata?.full_name) {
-            setCurrentUserName(user.user_metadata.full_name);
-          } else {
-            setCurrentUserName(user.email.split('@')[0] || 'Client');
-          }
+          const resolvedName =
+            profile?.name ||
+            user.user_metadata?.full_name ||
+            user.email.split('@')[0] ||
+            'Client';
+          const resolvedPhone = profile?.phone || user.phone || '';
+
+          setCurrentUserName(resolvedName);
+          setEditName(resolvedName);
+          setEditPhone(resolvedPhone);
         }
       } catch (e) {
         console.warn('Auth check notice:', e);
@@ -88,6 +96,52 @@ export default function SettingsPage() {
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUserEmail) return;
+    setIsSavingProfile(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await Promise.all([
+          supabase.from('profiles').upsert({
+            id: user.id,
+            name: editName,
+            phone: editPhone,
+            updated_at: new Date().toISOString(),
+          }),
+          supabase.auth.updateUser({
+            data: { full_name: editName, phone: editPhone },
+          }),
+        ]);
+      }
+      setCurrentUserName(editName);
+      showToast('Profile information saved successfully!');
+      setIsEditProfileOpen(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save profile';
+      showToast(msg);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    if (!currentUserEmail) return;
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(currentUserEmail, {
+        redirectTo: `${window.location.origin}/auth/callback?type=recovery&next=/reset-password?mode=update`,
+      });
+      if (error) throw error;
+      showToast(`Password reset link sent to ${currentUserEmail}!`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send reset link';
+      showToast(msg);
+    }
   };
 
   const handlePasswordUpdate = async (e: React.FormEvent) => {
@@ -123,17 +177,15 @@ export default function SettingsPage() {
 
   const handleClearCache = () => {
     try {
-      localStorage.removeItem('taliyo_cart');
-      localStorage.removeItem('taliyo_guest_wishlist');
       localStorage.removeItem('taliyo_dismissed_notifications');
+      localStorage.removeItem('taliyo_checkout_draft');
       localStorage.removeItem('taliyo_saved_addresses');
       localStorage.removeItem('taliyo_saved_payments');
-      window.dispatchEvent(new Event('taliyo_cart_updated'));
-      window.dispatchEvent(new Event('taliyo_wishlist_updated'));
+      invalidateClientCache('all');
       setCachedKeyCount(0);
-      showToast('Local app cache cleared.');
+      showToast('Temporary app cache cleared (Cart & Wishlist kept safe).');
     } catch {
-      showToast('Local cache cleared');
+      showToast('Temporary app cache cleared.');
     }
   };
 
@@ -223,25 +275,46 @@ export default function SettingsPage() {
             Account & Security
           </h3>
           <div className="rounded-[22px] bg-[#0f1123]/95 border border-purple-500/15 divide-y divide-purple-500/10 overflow-hidden shadow-sm">
-            <Link
-              href="/profile"
-              className="flex items-center justify-between p-3.5 hover:bg-[#161833] transition-colors group cursor-pointer"
-            >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-10 h-10 rounded-full bg-[#2a1740] border border-purple-500/25 flex items-center justify-center text-purple-300 shrink-0 group-hover:scale-105 transition-transform">
-                  <User className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-white group-hover:text-purple-200 transition-colors">
-                    Profile & Personal Info
+            {currentUserEmail ? (
+              <button
+                type="button"
+                onClick={() => setIsEditProfileOpen(true)}
+                className="w-full flex items-center justify-between p-3.5 hover:bg-[#161833] transition-colors group cursor-pointer text-left"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-[#2a1740] border border-purple-500/25 flex items-center justify-center text-purple-300 shrink-0 group-hover:scale-105 transition-transform">
+                    <User className="w-5 h-5" />
                   </div>
-                  <div className="text-xs text-gray-400 mt-0.5 truncate">
-                    {currentUserEmail ? `${currentUserName} (${currentUserEmail})` : 'Sign in to manage profile details'}
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-white group-hover:text-purple-200 transition-colors">
+                      Edit Profile Details
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5 truncate">
+                      {currentUserName} ({currentUserEmail})
+                    </div>
                   </div>
                 </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors shrink-0 ml-2" />
-            </Link>
+                <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors shrink-0 ml-2" />
+              </button>
+            ) : (
+              <Link
+                href="/login?next=/settings"
+                className="flex items-center justify-between p-3.5 hover:bg-[#161833] transition-colors group cursor-pointer"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-[#2a1740] border border-purple-500/25 flex items-center justify-center text-purple-300 shrink-0">
+                    <User className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-white">Sign In to Edit Profile</div>
+                    <div className="text-xs text-gray-400 mt-0.5 truncate">
+                      Update your account name, contact and email
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors shrink-0 ml-2" />
+              </Link>
+            )}
 
             {currentUserEmail ? (
               <button
@@ -257,7 +330,7 @@ export default function SettingsPage() {
                       Change Password
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5 truncate">
-                      Update your Supabase account password
+                      Update your account login password
                     </div>
                   </div>
                 </div>
@@ -291,7 +364,10 @@ export default function SettingsPage() {
             Appearance & Storage
           </h3>
           <div className="rounded-[22px] bg-[#0f1123]/95 border border-purple-500/15 divide-y divide-purple-500/10 overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between p-3.5">
+            <div
+              onClick={() => showToast('OLED Dark Mode is active for optimal battery and high-contrast clarity.')}
+              className="flex items-center justify-between p-3.5 hover:bg-[#161833] transition-colors cursor-pointer"
+            >
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-[#2a1740] border border-purple-500/25 flex items-center justify-center text-fuchsia-300 shrink-0">
                   <Moon className="w-5 h-5" />
@@ -301,8 +377,8 @@ export default function SettingsPage() {
                   <div className="text-xs text-gray-400 mt-0.5 truncate">Dark Mode (OLED optimized)</div>
                 </div>
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-purple-600/25 border border-purple-500/35 text-purple-200 text-xs font-semibold shrink-0 ml-2">
-                Dark
+              <span className="px-2.5 py-1 rounded-full bg-purple-600/20 border border-purple-500/30 text-purple-200 text-[11px] font-semibold shrink-0 ml-2">
+                Active (Default)
               </span>
             </div>
 
@@ -312,20 +388,20 @@ export default function SettingsPage() {
             >
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-[#2a1740] border border-purple-500/25 flex items-center justify-center text-teal-300 shrink-0">
-                  <Download className="w-5 h-5" />
+                  <RotateCcw className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-white group-hover:text-teal-200 transition-colors">
-                    Clear Local Cache
+                    Clear Temporary Cache
                   </div>
                   <div className="text-xs text-gray-400 mt-0.5 truncate">
-                    Reset saved cart & dismissed alert preferences
+                    Refresh catalog cache &amp; dismissed alerts (keeps Cart safe)
                   </div>
                 </div>
               </div>
 
               <span className="text-xs text-gray-400 group-hover:text-purple-300 font-mono shrink-0 ml-2">
-                {cachedKeyCount > 0 ? `${cachedKeyCount} cached` : 'Clean'}
+                {cachedKeyCount > 0 ? `${cachedKeyCount} items` : 'Clean'}
               </span>
             </button>
           </div>
@@ -350,7 +426,7 @@ export default function SettingsPage() {
                     Help & Support
                   </div>
                   <div className="text-xs text-gray-400 mt-0.5 truncate">
-                    Contact support via phone, WhatsApp or AI Advisor
+                    Contact support via phone, WhatsApp or live help desk
                   </div>
                 </div>
               </div>
@@ -402,6 +478,79 @@ export default function SettingsPage() {
         </div>
       </main>
 
+      {/* MODAL 0: Edit Profile Details */}
+      {isEditProfileOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-3xl bg-[#0f1124] border border-purple-500/30 p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-purple-500/15 pb-3">
+              <div className="flex items-center gap-2.5">
+                <User className="w-5 h-5 text-purple-400" />
+                <h3 className="text-lg font-bold text-white">Edit Profile Details</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditProfileOpen(false)}
+                className="w-8 h-8 rounded-full bg-[#181a33] flex items-center justify-center text-gray-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="flex flex-col gap-3.5">
+              <div>
+                <label className="text-xs font-semibold text-gray-300 mb-1.5 block">Full Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Your full name"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#161833] border border-purple-500/20 text-white text-sm focus:outline-none focus:border-purple-500 placeholder-gray-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-300 mb-1.5 block">Contact Phone Number</label>
+                <input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="e.g. 9696669964"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#161833] border border-purple-500/20 text-white text-sm focus:outline-none focus:border-purple-500 placeholder-gray-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-400 mb-1.5 block">Registered Email (Locked for security)</label>
+                <input
+                  type="email"
+                  value={currentUserEmail || ''}
+                  disabled
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#101226] border border-purple-500/10 text-gray-400 text-sm cursor-not-allowed"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditProfileOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-[#181a33] text-gray-300 text-sm font-semibold hover:bg-[#202242] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-sm font-bold shadow-md shadow-fuchsia-600/30 hover:opacity-95 transition-opacity cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingProfile ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL 1: Change Password */}
       {isSecurityModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -445,13 +594,14 @@ export default function SettingsPage() {
               </div>
 
               <div className="text-[11px] text-gray-400 flex items-center justify-between pt-1">
-                <span>Forgot current password?</span>
-                <Link
-                  href="/reset-password"
-                  className="text-fuchsia-400 hover:underline font-semibold"
+                <span>Forgot password?</span>
+                <button
+                  type="button"
+                  onClick={handleSendResetEmail}
+                  className="text-fuchsia-400 hover:underline font-semibold cursor-pointer"
                 >
-                  Send Reset Link
-                </Link>
+                  Send Reset Link to Email
+                </button>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3">

@@ -116,10 +116,10 @@ const HELP_TOPICS = [
   },
   {
     id: 'setup-help',
-    title: 'AI Advisor',
-    href: '/advisor',
+    title: 'Service Catalog',
+    href: '/categories',
     icon: <Wrench className="w-5 h-5 text-amber-400" />,
-    badge: 'Coming Soon',
+    badge: 'Explore',
   },
   {
     id: 'policies',
@@ -129,6 +129,17 @@ const HELP_TOPICS = [
     badge: 'Policies',
   },
 ];
+
+function formatPhoneReadable(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+  }
+  return raw;
+}
 
 function isSupportCurrentlyOnline(): boolean {
   try {
@@ -161,6 +172,40 @@ export default function SupportPage() {
   const [supportTemplate, setSupportTemplate] = useState('Hi! I need help with Taliyo Marketplace services.');
   const chatBoxRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      const sp = new URLSearchParams(window.location.search);
+      const orderId = sp.get('orderId');
+      const title = sp.get('title');
+      if (orderId) {
+        setChatOpen(true);
+        setActiveChip('order');
+        setMessages([
+          {
+            id: 'order-greeting',
+            sender: 'bot',
+            text: `Hello! I see you need assistance with Order ${orderId}${title ? ` ("${title}")` : ''}. How can we help you with this project today?`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            actions: [
+              {
+                label: 'View Milestone Tracker',
+                href: `/orders/${orderId.replace(/^#TLY/i, '')}`,
+              },
+            ],
+            followUps: [
+              `What is the current delivery status of ${orderId}?`,
+              `Request revision or update on ${orderId}`,
+              `Connect with assigned engineer on WhatsApp`,
+            ],
+          },
+        ]);
+      }
+    } catch (e) {
+      console.warn('Notice reading order query params:', e);
+    }
+  }, []);
 
   useEffect(() => {
     supabase.auth
@@ -279,7 +324,7 @@ export default function SupportPage() {
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
         {/* Sticky Top Header */}
         <header className="sticky top-0 z-40 w-full bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -594,32 +639,7 @@ export default function SupportPage() {
               Direct Channels
             </h3>
 
-            {/* Card 1: Help Desk Chat */}
-            <button
-              type="button"
-              onClick={openChatPanel}
-              className="w-full text-left group relative flex items-center justify-between p-3.5 rounded-[22px] bg-gradient-to-r from-[#121226]/95 via-[#161630]/95 to-[#1c183b]/95 border border-purple-500/20 hover:border-purple-400/50 transition-all cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-[#221045] border border-purple-500/30 flex items-center justify-center text-fuchsia-400 flex-shrink-0">
-                  <MessageSquare className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-white">
-                    Help Desk Chat
-                  </h4>
-                  <p className="text-[11px] text-purple-200/60 leading-tight mt-0.5">
-                    Instant answers • Auto-routes unsolved issues to WhatsApp
-                  </p>
-                </div>
-              </div>
-
-              <div className="w-8 h-8 rounded-full bg-[#1e1c3b] border border-purple-500/30 flex items-center justify-center text-gray-300 flex-shrink-0 ml-2">
-                <ArrowRight className="w-4 h-4" />
-              </div>
-            </button>
-
-            {/* Card 2: WhatsApp Support */}
+            {/* Card 1: WhatsApp Support */}
             <a
               href={whatsappUrl}
               target="_blank"
@@ -635,7 +655,7 @@ export default function SupportPage() {
                     WhatsApp Support
                   </h4>
                   <p className="text-[11px] text-purple-200/60 leading-tight mt-0.5">
-                    Direct chat on WhatsApp ({supportWhatsApp})
+                    Direct chat on WhatsApp ({formatPhoneReadable(supportWhatsApp)})
                   </p>
                 </div>
               </div>
@@ -645,7 +665,7 @@ export default function SupportPage() {
               </div>
             </a>
 
-            {/* Card 3: Talk to Support Team */}
+            {/* Card 2: Talk to Support Team */}
             <a
               href={`tel:${supportPhone}`}
               className="group relative flex items-center justify-between p-3.5 rounded-[22px] bg-gradient-to-r from-[#121226]/95 via-[#161630]/95 to-[#1c183b]/95 border border-purple-500/20 hover:border-cyan-400/50 transition-all cursor-pointer"
@@ -659,7 +679,7 @@ export default function SupportPage() {
                     Talk to Support Team
                   </h4>
                   <p className="text-[11px] text-purple-200/60 leading-tight mt-0.5">
-                    Call {supportPhone} directly
+                    Call {formatPhoneReadable(supportPhone)} directly
                   </p>
                 </div>
               </div>

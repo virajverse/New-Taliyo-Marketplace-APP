@@ -45,6 +45,7 @@ export default function OrdersPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authUser, setAuthUser] = useState<{ id: string; email?: string } | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [orderToCancel, setOrderToCancel] = useState<OrderItem | null>(null);
   const [supportWhatsApp, setSupportWhatsApp] = useState('917042523611');
   const [activeTab, setActiveTab] = useState<OrderStatus>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -124,11 +125,33 @@ export default function OrdersPage() {
                 })
               : 'Recent';
 
+            const estDate = b.created_at
+              ? new Date(new Date(b.created_at).getTime() + 10 * 24 * 60 * 60 * 1000).toLocaleDateString(
+                  'en-IN',
+                  {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  },
+                )
+              : '7–14 Days';
+
             const cleanPrice = b.service_price
               ? b.service_price.toString().startsWith('₹')
                 ? String(b.service_price)
                 : `₹${b.service_price}`
               : 'Verified Custom Plan';
+
+            const rawReq = String(b.requirements || '').trim();
+            const notesPart = rawReq.includes('Notes:')
+              ? rawReq.split('Notes:').slice(1).join('Notes:').trim()
+              : rawReq.startsWith('Ref:')
+              ? ''
+              : rawReq;
+            const cleanDescription =
+              notesPart && notesPart !== 'Standard Delivery'
+                ? notesPart
+                : 'End-to-end delivery with full source code ownership & deployment support.';
 
             return {
               id: b.id,
@@ -138,12 +161,15 @@ export default function OrdersPage() {
               status: st,
               statusLabel: stLabel,
               planName: cleanPrice,
-              description:
-                b.requirements ||
-                'Custom project delivery with source code ownership.',
+              description: cleanDescription,
               bookedDate: createdDate,
-              deliveryDate: 'Scheduled',
-              deliveryLabel: st === 'completed' ? 'Delivered on' : 'Scheduled',
+              deliveryDate: st === 'cancelled' ? 'Cancelled' : estDate,
+              deliveryLabel:
+                st === 'completed'
+                  ? 'Delivered on'
+                  : st === 'cancelled'
+                  ? 'Status'
+                  : 'Est. Delivery',
               imageSrc:
                 idx % 3 === 0
                   ? '/assets/order_thumb_1.png'
@@ -224,37 +250,66 @@ export default function OrdersPage() {
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
         {/* Sticky Top Header */}
         <header className="sticky top-0 z-40 w-full bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              aria-label="Go Back"
-              className="w-9 h-9 rounded-full bg-[#121326] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-400 transition-all cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div>
-              <h1 className="text-base sm:text-lg font-black text-white tracking-tight leading-none">
-                My Orders
-              </h1>
-              <p className="text-[10px] text-purple-200/60 font-medium leading-tight mt-0.5">
-                Track, manage and view all your orders
-              </p>
-            </div>
+          <div>
+            <h1 className="text-base sm:text-lg font-black text-white tracking-tight leading-none">
+              My Orders
+            </h1>
+            <p className="text-[10px] text-purple-200/60 font-medium leading-tight mt-0.5">
+              Track, manage and view all your orders
+            </p>
           </div>
 
-          {/* Top Right: + Custom Order */}
+          {/* Top Right: + New Order */}
           <Link
-            href="/advisor"
+            href="/categories"
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-[11px] font-bold shadow-md shadow-purple-900/40 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Custom Order</span>
+            <span>New Order</span>
           </Link>
         </header>
+
+        {/* Cancel Order Confirmation Modal */}
+        {orderToCancel && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-sm rounded-3xl bg-[#121326] border border-purple-500/30 p-5 space-y-4 shadow-2xl text-center">
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                <X className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-white">
+                  Cancel Order {orderToCancel.orderNumber}?
+                </h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Are you sure you want to cancel <strong className="text-white">{orderToCancel.title}</strong>? This action cannot be undone.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setOrderToCancel(null)}
+                  className="py-2.5 rounded-xl bg-[#1b1c36] border border-purple-500/20 text-xs font-bold text-gray-300 hover:text-white cursor-pointer"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = orderToCancel;
+                    setOrderToCancel(null);
+                    void handleCancelOrder(target);
+                  }}
+                  className="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white shadow-lg shadow-rose-950/50 cursor-pointer"
+                >
+                  Yes, Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Filter Tabs Strip */}
         <div className="px-4 pt-3 pb-1 border-b border-purple-500/10">
@@ -399,7 +454,7 @@ export default function OrdersPage() {
               </p>
               {!isAuthenticated ? (
                 <Link
-                  href="/login"
+                  href="/login?next=/orders"
                   className="px-4 py-2 rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-xs font-bold shadow-lg hover:opacity-95 transition-all"
                 >
                   Sign In
@@ -539,7 +594,7 @@ export default function OrdersPage() {
                         <button
                           type="button"
                           disabled={cancellingId === order.id}
-                          onClick={() => handleCancelOrder(order)}
+                          onClick={() => setOrderToCancel(order)}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-gray-400 hover:text-rose-400 disabled:opacity-50 text-[11px] font-medium transition-colors cursor-pointer"
                         >
                           <X className="w-3 h-3" />

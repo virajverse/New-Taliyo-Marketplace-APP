@@ -564,7 +564,7 @@ export default function ProfilePage() {
                     App Settings & Security
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Password, 2FA, theme &amp; app preferences
+                    Password update, cache &amp; legal info
                   </div>
                 </div>
               </div>

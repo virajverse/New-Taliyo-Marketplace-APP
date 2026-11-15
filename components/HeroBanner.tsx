@@ -34,6 +34,25 @@ export default function HeroBanner() {
   const [slides, setSlides] = useState<BannerSlide[]>([BRAND_INTRO_SLIDE]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0]?.clientX ?? null;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || slides.length <= 1) return;
+    const endX = e.changedTouches[0]?.clientX ?? touchStartXRef.current;
+    const diff = touchStartXRef.current - endX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0) {
+        setCurrentSlide((prev) => (prev + 1) % slides.length);
+      } else {
+        setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
+      }
+    }
+    touchStartXRef.current = null;
+  };
 
   // Fetch active banners configured in Supabase / Admin Panel with versioned SWR caching
   useEffect(() => {
@@ -96,8 +115,12 @@ export default function HeroBanner() {
 
   return (
     <div className="w-full relative">
-      {/* Horizontal Landscape Rectangle Banner Container (h-38 sm:h-44, never tall) */}
-      <div className="relative w-full h-[152px] sm:h-[168px] rounded-2xl sm:rounded-3xl overflow-hidden border border-purple-500/30 shadow-[0_10px_30px_rgba(0,0,0,0.65)] bg-gradient-to-r from-[#190c38] via-[#12082b] to-[#260e45]">
+      {/* Horizontal Landscape Rectangle Banner Container */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className="relative w-full min-h-[158px] sm:min-h-[172px] rounded-2xl sm:rounded-3xl overflow-hidden border border-purple-500/30 shadow-[0_10px_30px_rgba(0,0,0,0.65)] bg-gradient-to-r from-[#190c38] via-[#12082b] to-[#260e45]"
+      >
         {/* Ambient background glows */}
         <div className="absolute -top-10 -right-10 w-36 h-36 rounded-full bg-fuchsia-600/25 blur-2xl pointer-events-none" />
         <div className="absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-purple-600/25 blur-2xl pointer-events-none" />
@@ -122,7 +145,7 @@ export default function HeroBanner() {
                   </div>
 
                   {/* Headline */}
-                  <h2 className="text-sm sm:text-base font-black text-white tracking-tight leading-tight line-clamp-1">
+                  <h2 className="text-sm sm:text-base font-black text-white tracking-tight leading-snug line-clamp-2">
                     {slide.title}{' '}
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-pink-400">
                       {slide.highlightText}
@@ -130,7 +153,7 @@ export default function HeroBanner() {
                   </h2>
 
                   {/* Subtitle */}
-                  <p className="text-[10px] text-purple-200/70 line-clamp-1 mt-0.5 leading-snug">
+                  <p className="text-[10px] sm:text-[11px] text-purple-200/75 line-clamp-2 mt-0.5 leading-snug">
                     {slide.subtitle}
                   </p>
                 </div>

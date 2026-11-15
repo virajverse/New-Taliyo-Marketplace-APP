@@ -33,6 +33,8 @@ export default function CartPage() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showFeeInfo, setShowFeeInfo] = useState(false);
 
   // Load real items from persistent client storage
   useEffect(() => {
@@ -86,6 +88,7 @@ export default function CartPage() {
   // Clear entire cart
   const handleClearCart = () => {
     updateCartStorage([]);
+    setShowClearConfirm(false);
   };
 
   // Dynamic calculations
@@ -99,7 +102,7 @@ export default function CartPage() {
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
         {/* Sticky Top Header */}
         <header className="sticky top-0 z-40 w-full bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -125,15 +128,49 @@ export default function CartPage() {
           {cartItems.length > 0 && (
             <button
               type="button"
-              onClick={handleClearCart}
+              onClick={() => setShowClearConfirm(true)}
               aria-label="Clear All Items"
               title="Clear Cart"
-              className="w-9 h-9 rounded-full bg-[#121326] border border-purple-500/20 flex items-center justify-center text-gray-400 hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-950/20 transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-full bg-[#121326] border border-purple-500/20 flex items-center gap-1.5 text-xs font-bold text-gray-300 hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-950/20 transition-all cursor-pointer"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Clear</span>
             </button>
           )}
         </header>
+
+        {/* Clear Cart Confirmation Modal */}
+        {showClearConfirm && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-sm rounded-3xl bg-[#121326] border border-purple-500/30 p-5 space-y-4 shadow-2xl text-center">
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-white">Clear Shopping Cart?</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Are you sure you want to remove all {cartItems.length} selected service{cartItems.length === 1 ? '' : 's'} from your cart?
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  className="py-2.5 rounded-xl bg-[#1b1c36] border border-purple-500/20 text-xs font-bold text-gray-300 hover:text-white cursor-pointer"
+                >
+                  Keep Items
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearCart}
+                  className="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white shadow-lg shadow-rose-950/50 cursor-pointer"
+                >
+                  Yes, Clear All
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Cart Body */}
         <main className="flex-1 px-4 pt-3 space-y-4 pb-28">
@@ -227,39 +264,24 @@ export default function CartPage() {
                         </span>
                       </div>
 
-                      {/* Bottom Row: Stepper & Trash Button */}
-                      <div className="mt-2.5 flex items-center justify-end gap-3 pt-1 border-t border-purple-500/10">
-                        {/* Stepper Capsule */}
-                        <div className="inline-flex items-center gap-2.5 px-2.5 py-1 rounded-full bg-[#0c0d1c] border border-purple-500/25 shadow-inner">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(item.id, -1)}
-                            aria-label="Decrease Quantity"
-                            className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-white transition-colors cursor-pointer"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="text-xs font-bold text-white min-w-[14px] text-center">
-                            {item.quantity}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(item.id, 1)}
-                            aria-label="Increase Quantity"
-                            className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-white transition-colors cursor-pointer"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
+                      {/* Bottom Row: Change Plan & Remove Button */}
+                      <div className="mt-2.5 flex items-center justify-between gap-3 pt-1.5 border-t border-purple-500/10">
+                        <Link
+                          href={`/services/${item.slug}`}
+                          className="text-[11px] font-bold text-purple-300 hover:text-fuchsia-300 transition-colors"
+                        >
+                          Change Plan →
+                        </Link>
 
                         {/* Trash Delete Button */}
                         <button
                           type="button"
                           onClick={() => handleRemoveItem(item.id)}
                           aria-label={`Remove ${item.title}`}
-                          className="w-7 h-7 rounded-full bg-[#121326] border border-purple-500/20 flex items-center justify-center text-gray-400 hover:text-rose-400 hover:border-rose-500/40 transition-all cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#121326] border border-purple-500/20 text-[11px] font-semibold text-gray-400 hover:text-rose-400 hover:border-rose-500/40 transition-all cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3 h-3" />
+                          <span>Remove</span>
                         </button>
                       </div>
                     </div>
@@ -283,14 +305,25 @@ export default function CartPage() {
                   </div>
 
                   {/* Platform & IP Protection Fee */}
-                  <div className="flex items-center justify-between text-gray-300">
-                    <span className="inline-flex items-center gap-1">
-                      <span>Platform & IP Protection Fee</span>
-                      <Info className="w-3 h-3 text-purple-400" />
-                    </span>
-                    <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                      Free (Waived)
-                    </span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-gray-300">
+                      <button
+                        type="button"
+                        onClick={() => setShowFeeInfo((prev) => !prev)}
+                        className="inline-flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <span>Platform &amp; IP Protection Fee</span>
+                        <Info className="w-3.5 h-3.5 text-purple-400" />
+                      </button>
+                      <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                        Free (Waived)
+                      </span>
+                    </div>
+                    {showFeeInfo && (
+                      <p className="p-2.5 rounded-xl bg-[#161836] border border-purple-500/25 text-[11px] text-purple-200/80 leading-relaxed">
+                        Includes 100% source code ownership transfer, milestone verification, and zero platform commission fee.
+                      </p>
+                    )}
                   </div>
 
                   {/* Divider */}

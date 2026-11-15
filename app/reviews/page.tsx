@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
+  ArrowRight,
   Star,
   ShieldCheck,
   ChevronDown,
@@ -357,20 +359,12 @@ export default function ReviewsPage() {
             })}
           </div>
 
-          {/* Sub-controls: Verified Only toggle & Sort dropdown */}
+          {/* Sub-controls: Verified Info & Sort dropdown */}
           <div className="flex items-center justify-between px-1">
-            {/* Verified Only Toggle Pill */}
-            <button
-              onClick={() => setVerifiedOnly((prev) => !prev)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                verifiedOnly
-                  ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300'
-                  : 'bg-[#121429] border border-purple-500/20 text-gray-400 hover:text-gray-200'
-              }`}
-            >
+            <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Verified Only</span>
-            </button>
+              <span>100% Verified Client Feedback</span>
+            </div>
 
             {/* Sort Dropdown */}
             <div className="relative">
@@ -380,29 +374,35 @@ export default function ReviewsPage() {
                 className="px-3 py-1.5 rounded-full bg-[#121429] border border-purple-500/20 text-xs font-semibold text-purple-300 hover:border-purple-500/40 hover:bg-[#181a33] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <span>Sort: {sortLabels[sortBy]}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-purple-400" />
+                <ChevronDown className={`w-3.5 h-3.5 text-purple-400 transition-transform ${isSortDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isSortDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-44 rounded-2xl bg-[#0f1124] border border-purple-500/30 p-1.5 shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150">
-                  {(['recent', 'highest'] as SortOption[]).map((opt) => (
-                    <button
-                      key={opt}
-                      onClick={() => {
-                        setSortBy(opt);
-                        setIsSortDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                        sortBy === opt
-                          ? 'bg-purple-600/30 text-fuchsia-300 font-bold'
-                          : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                      }`}
-                    >
-                      <span>{sortLabels[opt]}</span>
-                      {sortBy === opt && <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400" />}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setIsSortDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1.5 w-44 rounded-2xl bg-[#0f1124] border border-purple-500/30 p-1.5 shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150">
+                    {(['recent', 'highest'] as SortOption[]).map((opt) => (
+                      <button
+                        key={opt}
+                        onClick={() => {
+                          setSortBy(opt);
+                          setIsSortDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
+                          sortBy === opt
+                            ? 'bg-purple-600/30 text-fuchsia-300 font-bold'
+                            : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        <span>{sortLabels[opt]}</span>
+                        {sortBy === opt && <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -489,15 +489,38 @@ export default function ReviewsPage() {
                 </p>
               </div>
 
-              {/* Bottom Meta: Project Tag */}
+              {/* Bottom Meta: Project Tag & Explore Link */}
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-purple-500/10 flex-wrap">
                 <span className="text-[11px] font-medium text-purple-300/90 bg-purple-500/10 px-2.5 py-0.5 rounded-full border border-purple-500/20 truncate max-w-[240px]">
                   {rev.projectTag}
                 </span>
-                <span className="text-[10px] text-gray-400">{rev.timeAgo}</span>
+                <Link
+                  href="/categories"
+                  className="text-[11px] font-bold text-fuchsia-400 hover:text-fuchsia-300 inline-flex items-center gap-1 transition-colors"
+                >
+                  <span>Explore Systems</span>
+                  <span>→</span>
+                </Link>
               </div>
             </div>
           )))}
+        </div>
+
+        {/* Layman Conversion Banner */}
+        <div className="mt-5 rounded-2xl bg-gradient-to-r from-purple-900/40 via-[#180f33]/90 to-indigo-900/40 border border-purple-500/25 p-4 text-center space-y-2.5 shadow-lg">
+          <h4 className="text-sm font-bold text-white tracking-tight">Ready to start your own project?</h4>
+          <p className="text-xs text-purple-200/70 max-w-xs mx-auto leading-relaxed">
+            Browse verified turn-key software and systems with milestone delivery &amp; full IP code handover.
+          </p>
+          <div>
+            <Link
+              href="/categories"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-xs font-bold shadow-md hover:opacity-95 transition-all"
+            >
+              <span>Browse All Systems</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
         </div>
       </main>
 
@@ -606,7 +629,7 @@ export default function ReviewsPage() {
                   className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-xs font-bold shadow-md shadow-fuchsia-600/30 hover:opacity-95 transition-opacity cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{isSubmitting ? 'Saving to Supabase...' : 'Submit Review'}</span>
+                  <span>{isSubmitting ? 'Submitting Review...' : 'Submit Review'}</span>
                 </button>
               </div>
             </form>

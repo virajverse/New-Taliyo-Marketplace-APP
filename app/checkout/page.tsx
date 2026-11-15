@@ -92,6 +92,16 @@ export default function CheckoutPage() {
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [availableCoupons, setAvailableCoupons] = useState<
+    Array<{
+      code: string;
+      description?: string;
+      discount_type?: string;
+      discount_value?: number;
+      min_order_amount?: number;
+    }>
+  >([]);
+  const [showCouponsList, setShowCouponsList] = useState(false);
 
   // Payment State
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('upi');
@@ -141,6 +151,15 @@ export default function CheckoutPage() {
       .catch(() => {
         // fallback to default config
       });
+
+    fetch('/api/coupons')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (Array.isArray(json?.data)) {
+          setAvailableCoupons(json.data);
+        }
+      })
+      .catch(() => {});
 
     let loadedDraft: CheckoutDraft | null = null;
 
@@ -481,6 +500,17 @@ export default function CheckoutPage() {
   }, [utr, payableNow, paymentMethod]);
 
   const handleConfirmPayment = async () => {
+    if (finalPayable > 0) {
+      if ((paymentMethod === 'upi' || paymentMethod === 'advance') && !/^\d{12}$/.test(utr.trim())) {
+        setSubmitError('Please enter your 12-digit UPI UTR / Reference ID from your payment receipt to confirm.');
+        return;
+      }
+      if (paymentMethod === 'bank' && utr.trim().length < 6) {
+        setSubmitError('Please enter your NEFT / IMPS Reference Number to confirm your bank transfer.');
+        return;
+      }
+    }
+
     if (utrCheck?.duplicate) {
       setSubmitError(utrCheck.message || 'This UTR has already been used on another order.');
       return;
@@ -604,7 +634,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center pb-14">
-      <div className="w-full max-w-lg min-h-screen flex flex-col bg-[#07070d] relative">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative">
         {/* Checkout Header */}
         <header className="sticky top-0 z-40 bg-[#090915]/95 backdrop-blur-xl border-b border-purple-500/15 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -633,10 +663,21 @@ export default function CheckoutPage() {
           </div>
 
           {step === 2 ? (
-            <div className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-400/30 text-amber-300 text-[11px] font-mono font-bold flex items-center gap-1.5">
-              <Clock className="w-3 h-3 animate-pulse" />
-              <span>{formatTimer(secondsLeft)}</span>
-            </div>
+            secondsLeft > 0 ? (
+              <div className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-400/30 text-amber-300 text-[11px] font-mono font-bold flex items-center gap-1.5">
+                <Clock className="w-3 h-3 animate-pulse" />
+                <span>{formatTimer(secondsLeft)}</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSecondsLeft(600)}
+                className="px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-400/40 text-rose-300 hover:text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Clock className="w-3 h-3" />
+                <span>Session Expired • Tap to Refresh</span>
+              </button>
+            )
           ) : step === 1 ? (
             <div className="px-2.5 py-1 rounded-full bg-purple-900/30 border border-purple-500/30 text-purple-200 text-[10px] font-bold">
               Step 1 of 2
@@ -754,6 +795,48 @@ export default function CheckoutPage() {
               )}
 
               {couponError && <p className="text-[11px] text-rose-400 font-medium">{couponError}</p>}
+
+              {!appliedCoupon && availableCoupons.length > 0 && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowCouponsList((prev) => !prev)}
+                    className="text-[11px] font-bold text-fuchsia-400 hover:text-fuchsia-300 cursor-pointer"
+                  >
+                    {showCouponsList ? 'Hide Available Coupons ↑' : `View Available Coupons (${availableCoupons.length}) →`}
+                  </button>
+                  {showCouponsList && (
+                    <div className="mt-2 space-y-1.5">
+                      {availableCoupons.map((c) => (
+                        <div
+                          key={c.code}
+                          className="p-2.5 rounded-xl bg-[#171936] border border-purple-500/20 flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <span className="font-mono font-bold text-purple-200 block">{c.code}</span>
+                            <span className="text-[10px] text-gray-400 block truncate">
+                              {c.description ||
+                                (c.discount_type === 'percentage'
+                                  ? `${c.discount_value}% OFF`
+                                  : `₹${c.discount_value} OFF`)}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCouponInput(c.code);
+                              setCouponError(null);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-purple-600/30 border border-purple-400/40 text-purple-200 hover:text-white text-[10px] font-bold shrink-0 cursor-pointer"
+                          >
+                            Use Code
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Client Contact Details */}
@@ -1022,7 +1105,7 @@ export default function CheckoutPage() {
 
                   {showUtrHelp && (
                     <div className="p-3 rounded-xl bg-[#171936] border border-purple-500/25 text-[11px] text-gray-300 leading-relaxed">
-                      Pay karne ke baad GPay, PhonePe ya Paytm receipt me <strong>&quot;UPI Ref No / UTR&quot;</strong> likha 12-digit number yahan enter karein (e.g. <code className="text-purple-200">402319876543</code>).
+                      After completing your payment on GPay, PhonePe, Paytm or BHIM, copy the 12-digit <strong>&quot;UPI Ref No / UTR&quot;</strong> from the payment receipt and enter it below (e.g. <code className="text-purple-200">402319876543</code>).
                     </div>
                   )}
 
@@ -1173,8 +1256,8 @@ export default function CheckoutPage() {
               </h1>
               <p className="text-xs text-gray-400 max-w-xs mx-auto leading-relaxed">
                 {autoVerifiedResult?.verified
-                  ? `Aapka UTR (${utr.trim()}) settlement pool se match ho gaya — order turant confirm ho gaya hai.`
-                  : 'Aapki payment verification request aur order details admin dashboard me save ho chuki hain.'}
+                  ? `Your UTR (${utr.trim()}) matched our settlement records — your project booking is now confirmed.`
+                  : 'Your payment verification request and order details have been saved. Our team will verify and start your project shortly.'}
               </p>
             </div>
 

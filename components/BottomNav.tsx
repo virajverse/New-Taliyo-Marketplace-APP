@@ -9,10 +9,17 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   const isHome = pathname === '/';
-  const isCategories = pathname.startsWith('/categories');
+  const isCategories =
+    pathname.startsWith('/categories') ||
+    pathname.startsWith('/services') ||
+    pathname === '/search';
   const isAdvisor = pathname === '/advisor';
-  const isOrders = pathname.startsWith('/orders');
-  const isProfile = pathname === '/profile';
+  const isOrders = pathname.startsWith('/orders') || pathname.startsWith('/order-status');
+  const isProfile =
+    pathname === '/profile' ||
+    pathname === '/settings' ||
+    pathname === '/notifications' ||
+    pathname === '/wishlist';
 
   return (
     <div className="fixed bottom-3 inset-x-0 z-50 flex justify-center px-4 pointer-events-none">

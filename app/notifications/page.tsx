@@ -53,6 +53,7 @@ export default function NotificationsPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Load notifications with versioned SWR caching
   useEffect(() => {
@@ -119,7 +120,7 @@ export default function NotificationsPage() {
                   description: (item.message || '').replace(/<[^>]*>?/gm, ''),
                   time: formatTimeAgo(item.created_at),
                   isUnread: !item.is_read,
-                  link: item.related_id ? `/orders/${item.related_id}` : '/categories',
+                  link: item.related_id ? `/orders/${item.related_id}` : undefined,
                   iconType: icon,
                 };
               });
@@ -173,6 +174,7 @@ export default function NotificationsPage() {
       localStorage.setItem(DISMISSED_NOTIF_KEY, JSON.stringify(merged));
     } catch {}
     setNotifications([]);
+    setShowClearConfirm(false);
     showToast('Inbox cleared on this device');
   };
 
@@ -249,7 +251,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl pb-24">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl pb-24">
         {/* Light Glassmorphic Toast Notification */}
         {toastMessage && (
           <div className="fixed top-16 inset-x-0 z-50 flex justify-center px-4 animate-in fade-in slide-in-from-top-3 duration-250 pointer-events-none">
@@ -299,7 +301,7 @@ export default function NotificationsPage() {
             {notifications.length > 0 && (
               <button
                 type="button"
-                onClick={handleClearAll}
+                onClick={() => setShowClearConfirm(true)}
                 title="Clear all"
                 className="w-8 h-8 rounded-full bg-[#141029] border border-purple-500/20 text-gray-400 hover:text-rose-400 hover:border-rose-400/40 flex items-center justify-center transition-all cursor-pointer"
               >
@@ -308,6 +310,39 @@ export default function NotificationsPage() {
             )}
           </div>
         </header>
+
+        {/* Clear All Notifications Confirmation Modal */}
+        {showClearConfirm && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-sm rounded-3xl bg-[#121326] border border-purple-500/30 p-5 space-y-4 shadow-2xl text-center">
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-white">Clear All Notifications?</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Are you sure you want to dismiss all {notifications.length} notification{notifications.length === 1 ? '' : 's'} from your inbox?
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  className="py-2.5 rounded-xl bg-[#1b1c36] border border-purple-500/20 text-xs font-bold text-gray-300 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white shadow-lg shadow-rose-950/50 cursor-pointer"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Category Tabs */}
         <div className="px-4 pt-3 pb-2 flex gap-2 overflow-x-auto no-scrollbar">

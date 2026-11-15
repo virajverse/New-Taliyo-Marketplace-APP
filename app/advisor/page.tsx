@@ -58,29 +58,19 @@ export default function AdvisorPage() {
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
         {/* Sticky Top Header */}
         <header className="sticky top-0 z-40 w-full bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              aria-label="Go Back"
-              className="w-9 h-9 rounded-full bg-[#121326] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-400 transition-all cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div>
-              <h1 className="text-base sm:text-lg font-black text-white tracking-tight leading-none flex items-center gap-2">
-                <span>AI Project Advisor</span>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[9px] font-extrabold uppercase tracking-wider">
-                  Coming Soon
-                </span>
-              </h1>
-              <p className="text-[10px] text-purple-200/60 font-medium leading-tight mt-0.5">
-                Architecture • Tech Stack • Cost Estimator
-              </p>
-            </div>
+          <div>
+            <h1 className="text-base sm:text-lg font-black text-white tracking-tight leading-none flex items-center gap-2">
+              <span>AI Project Advisor</span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[9px] font-extrabold uppercase tracking-wider">
+                Coming Soon
+              </span>
+            </h1>
+            <p className="text-[10px] text-purple-200/60 font-medium leading-tight mt-0.5">
+              Architecture • Tech Stack • Cost Estimator
+            </p>
           </div>
 
           <a
@@ -99,11 +89,6 @@ export default function AdvisorPage() {
           {/* Hero Coming Soon Card */}
           <div className="relative rounded-[28px] bg-gradient-to-br from-[#1d0d3d] via-[#120b28] to-[#2b0d4b] border border-purple-500/30 p-6 shadow-2xl overflow-hidden text-center">
             <div className="relative z-10 flex flex-col items-center">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider mb-4">
-                <Clock className="w-3.5 h-3.5" />
-                <span>Coming Soon</span>
-              </div>
-
               <div className="relative w-28 h-28 rounded-3xl bg-[#180c36] border border-purple-400/30 p-2 mb-4 flex items-center justify-center">
                 <Image
                   src="/assets/cyborg_clean.png"
@@ -116,18 +101,14 @@ export default function AdvisorPage() {
 
               <div className="inline-flex items-center gap-1 text-fuchsia-300 text-xs font-bold mb-1">
                 <Cpu className="w-3.5 h-3.5" />
-                <span>Taliyo Solution Architect</span>
+                <span>AI Project Advisor</span>
               </div>
 
               <h2 className="text-xl font-black text-white tracking-tight leading-snug">
-                Project Planning Assistant
-                <br />
-                <span className="text-fuchsia-400">
-                  Launching Soon
-                </span>
+                Automated Project Planner
               </h2>
 
-              <p className="mt-2.5 text-xs text-purple-100/75 leading-relaxed max-w-xs">
+              <p className="mt-2 text-xs text-purple-100/75 leading-relaxed max-w-xs">
                 We are building an automated project planner trained on live Taliyo systems. Until launch, connect directly with our engineering team on WhatsApp or use Customer Support.
               </p>
 
@@ -170,9 +151,14 @@ export default function AdvisorPage() {
             </h3>
             <div className="space-y-2.5">
               {UPCOMING_FEATURES.map((feat) => (
-                <div
+                <a
                   key={feat.title}
-                  className="p-3.5 rounded-[20px] bg-[#121326]/95 border border-purple-500/20 flex items-start gap-3"
+                  href={`https://wa.me/${supportWhatsApp}?text=${encodeURIComponent(
+                    `Hello Taliyo Team, I need help with ${feat.title} for my project.`,
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3.5 rounded-[20px] bg-[#121326]/95 border border-purple-500/20 hover:border-purple-400/50 transition-all flex items-start gap-3 cursor-pointer"
                 >
                   <div className="w-9 h-9 rounded-xl bg-[#1b1035] border border-purple-500/30 flex items-center justify-center flex-shrink-0">
                     {feat.icon}
@@ -185,8 +171,8 @@ export default function AdvisorPage() {
                       {feat.desc}
                     </p>
                   </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-purple-400/40 mt-1 flex-shrink-0" />
-                </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-purple-400/70 mt-1 flex-shrink-0" />
+                </a>
               ))}
             </div>
           </div>

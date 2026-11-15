@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -42,7 +43,7 @@ const POLICY_SECTIONS: PolicySection[] = [
     title: 'Information Sharing',
     subtitle: 'When and with whom we share your data',
     details:
-      'We do NOT sell your data. We share relevant project specs only with assigned verified developers and certified payment gateways (e.g., UPI, Razorpay, Stripe) under strict confidentiality agreements.',
+      'We do NOT sell your data. We share relevant project specs only with assigned verified developers and certified banking/payment networks (UPI, IMPS/NEFT settlement partners) under strict confidentiality agreements.',
   },
   {
     id: 'sec-4',
@@ -131,7 +132,7 @@ export default function PrivacyPolicyPage() {
 
             <div>
               <span className="inline-block px-2.5 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-semibold">
-                Last updated: Oct 5, 2026
+                Effective: March 2025
               </span>
               <h2 className="text-sm sm:text-base font-bold text-white tracking-tight mt-1.5 leading-snug">
                 We are committed to keeping your data safe, secure and transparent.
@@ -185,12 +186,20 @@ export default function PrivacyPolicyPage() {
           })}
         </div>
 
-        {/* Bottom Disclaimer Banner */}
-        <div className="p-4 rounded-2xl bg-[#0f1123]/80 border border-purple-500/15 flex items-start gap-2.5 text-xs text-gray-400 leading-relaxed">
-          <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-          <span>
-            By using Taliyo Marketplace, you agree to the terms of this Privacy Policy and our Terms of Service.
-          </span>
+        {/* Bottom Disclaimer & Direct Support Link */}
+        <div className="p-4 rounded-2xl bg-[#0f1123]/80 border border-purple-500/15 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-400 leading-relaxed">
+          <div className="flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+            <span>
+              By using Taliyo Marketplace, you agree to the terms of this Privacy Policy and client data protection guidelines.
+            </span>
+          </div>
+          <Link
+            href="/support"
+            className="shrink-0 px-3 py-1.5 rounded-xl bg-purple-600/20 border border-purple-500/30 text-purple-200 text-xs font-bold hover:bg-purple-600/35 hover:text-white transition-all"
+          >
+            Contact Support →
+          </Link>
         </div>
       </main>
 

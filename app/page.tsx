@@ -11,7 +11,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
       {/* Mobile container centered on larger screens */}
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
+      <div className="w-full max-w-xl min-h-screen flex flex-col bg-[#07070d] relative shadow-2xl">
         {/* Top Header */}
         <Header />
 
