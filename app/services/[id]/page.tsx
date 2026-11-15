@@ -20,6 +20,9 @@ import {
   Grid,
   Maximize2,
   X,
+  Globe,
+  ExternalLink,
+  MessageCircle,
 } from 'lucide-react';
 import { fetchSavedWishlistServiceIds, toggleWishlistService } from '@/lib/wishlistClient';
 import { subscribeSmartFetch } from '@/lib/clientCache';
@@ -53,6 +56,7 @@ interface ServiceMeta {
   reviewsCount: number;
   imageSrc: string;
   images: string[];
+  demoUrl?: string | null;
 }
 
 export default function ServiceDetailPage() {
@@ -61,10 +65,10 @@ export default function ServiceDetailPage() {
   const rawId = (params?.id as string) || '';
 
   const [serviceMeta, setServiceMeta] = useState<ServiceMeta | null>(null);
+  const [supportWhatsApp, setSupportWhatsApp] = useState('917042523611');
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [isGridOpen, setIsGridOpen] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
-  const [jumpInput, setJumpInput] = useState('');
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [packages, setPackages] = useState<PackageOption[]>([]);
   const [serviceReviews, setServiceReviews] = useState<ServiceReviewItem[]>([]);
@@ -99,6 +103,20 @@ export default function ServiceDetailPage() {
     };
   }, []);
 
+  // Fetch dynamic WhatsApp contact from Site Settings
+  useEffect(() => {
+    return subscribeSmartFetch<{ settings?: Record<string, string> }>(
+      '/api/site-settings',
+      'settings',
+      (json) => {
+        const num = json?.settings?.support_whatsapp;
+        if (typeof num === 'string' && num.trim()) {
+          setSupportWhatsApp(num.replace(/\D/g, '') || '917042523611');
+        }
+      },
+    );
+  }, []);
+
   useEffect(() => {
     if (!rawId) {
       setIsNotFound(true);
@@ -116,6 +134,7 @@ export default function ServiceDetailPage() {
         rating_count?: number | null;
         images?: string[] | null;
         price_min?: number | null;
+        video_url?: string | null;
       } | null;
       plans?: Array<{
         level?: string | null;
@@ -124,6 +143,7 @@ export default function ServiceDetailPage() {
         price_min?: number | null;
         estimated_delivery_time?: string | null;
         includes?: string[] | null;
+        demo_url?: string | null;
       }>;
     }>(
       `/api/catalog?mode=service&id=${encodeURIComponent(rawId)}`,
@@ -136,8 +156,16 @@ export default function ServiceDetailPage() {
           return;
         }
 
-        const rawImages = Array.isArray(svc.images) && svc.images.length > 0 ? svc.images : ['/assets/search_svc_1.png'];
+        // Limit preview gallery to 4-5 curated screens
+        const rawImages =
+          Array.isArray(svc.images) && svc.images.length > 0
+            ? svc.images.slice(0, 5)
+            : ['/assets/hero_laptop_clean.png'];
         const img = rawImages[0];
+
+        const plans = Array.isArray(json?.plans) ? json.plans : [];
+        const planWithDemo = plans.find((p) => p.demo_url);
+        const resolvedDemo = planWithDemo?.demo_url || svc.video_url || null;
 
         setIsNotFound(false);
         setServiceMeta({
@@ -149,6 +177,7 @@ export default function ServiceDetailPage() {
           reviewsCount: Number(svc.rating_count || 0),
           imageSrc: img,
           images: rawImages,
+          demoUrl: resolvedDemo,
         });
         setActiveImageIdx(0);
 
@@ -156,7 +185,6 @@ export default function ServiceDetailPage() {
           .then(({ serviceIds }) => setIsWishlisted(serviceIds.includes(svc.id)))
           .catch(() => {});
 
-        const plans = Array.isArray(json?.plans) ? json.plans : [];
         if (plans.length > 0) {
           const mappedPlans: PackageOption[] = plans.map((p, idx) => {
             const levelKey = idx === 0 ? 'basic' : idx === 1 ? 'standard' : 'premium';
@@ -228,13 +256,23 @@ export default function ServiceDetailPage() {
 
   const galleryImages = React.useMemo(() => {
     if (serviceMeta?.images && serviceMeta.images.length > 0) {
-      return serviceMeta.images;
+      return serviceMeta.images.slice(0, 5);
     }
-    return [serviceMeta?.imageSrc || '/assets/search_svc_1.png'];
+    return [serviceMeta?.imageSrc || '/assets/hero_laptop_clean.png'];
   }, [serviceMeta]);
 
   const totalGalleryImages = galleryImages.length;
   const currentGalleryImg = galleryImages[activeImageIdx] || galleryImages[0];
+
+  const handleOpenLiveDemo = () => {
+    if (serviceMeta?.demoUrl) {
+      window.open(serviceMeta.demoUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const text = `Hello Taliyo Technologies, I want to explore the live interactive demo / staging environment for: "${serviceMeta?.title || 'this system'}".`;
+    const waUrl = `https://wa.me/${supportWhatsApp}?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const handlePrevImage = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -244,16 +282,6 @@ export default function ServiceDetailPage() {
   const handleNextImage = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setActiveImageIdx((prev) => (prev < totalGalleryImages - 1 ? prev + 1 : 0));
-  };
-
-  const handleJumpToPage = (e: React.FormEvent) => {
-    e.preventDefault();
-    const p = parseInt(jumpInput, 10);
-    if (!isNaN(p) && p >= 1 && p <= totalGalleryImages) {
-      setActiveImageIdx(p - 1);
-      setIsGridOpen(false);
-      setJumpInput('');
-    }
   };
 
   const currentPkg = packages.find((p) => p.id === selectedPackage) || packages[1] || packages[0];
@@ -513,12 +541,12 @@ export default function ServiceDetailPage() {
                     <button
                       type="button"
                       onClick={() => setIsGridOpen(true)}
-                      aria-label="View All Pages"
+                      aria-label="View All Screens"
                       className="px-2.5 py-1.5 rounded-full bg-black/70 hover:bg-purple-900/80 text-white flex items-center gap-1.5 backdrop-blur-md border border-purple-400/30 text-xs font-bold cursor-pointer transition-all active:scale-95 shadow-md"
-                      title="Open Pages Grid"
+                      title="Open Screens Grid"
                     >
                       <Grid className="w-3.5 h-3.5 text-fuchsia-400" />
-                      <span>{totalGalleryImages} Pages</span>
+                      <span>{totalGalleryImages} Screens</span>
                     </button>
                   )}
                 </div>
@@ -538,14 +566,14 @@ export default function ServiceDetailPage() {
                   )}
                 </div>
 
-                {/* Bottom Right Page Counter Pill (Clickable to jump) */}
+                {/* Bottom Right Screen Counter Pill */}
                 {totalGalleryImages > 1 && (
                   <button
                     type="button"
                     onClick={() => setIsGridOpen(true)}
                     className="absolute bottom-3 right-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/75 border border-purple-400/30 backdrop-blur-md z-20 text-[11px] font-bold text-white hover:bg-purple-900/80 cursor-pointer transition-all"
                   >
-                    <span className="text-fuchsia-300">Page {activeImageIdx + 1}</span>
+                    <span className="text-fuchsia-300">Screen {activeImageIdx + 1}</span>
                     <span className="text-gray-400">/ {totalGalleryImages}</span>
                   </button>
                 )}
@@ -553,22 +581,22 @@ export default function ServiceDetailPage() {
 
               {/* Horizontal Thumbnail Strip for Quick Switching */}
               {totalGalleryImages > 1 && (
-                <div className="w-full bg-[#0a071a] border-b border-purple-500/15 px-3 py-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  {galleryImages.slice(0, 50).map((thumb, idx) => (
+                <div className="w-full bg-[#0a071a] border-b border-purple-500/15 px-3 py-2 flex items-center justify-center gap-2 overflow-x-auto no-scrollbar">
+                  {galleryImages.map((thumb, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => setActiveImageIdx(idx)}
-                      aria-label={`Jump to page ${idx + 1}`}
-                      className={`relative w-16 h-10 rounded-lg overflow-hidden shrink-0 border transition-all cursor-pointer ${
+                      aria-label={`Jump to screen ${idx + 1}`}
+                      className={`relative flex-1 max-w-[84px] h-11 rounded-xl overflow-hidden shrink-0 border transition-all cursor-pointer ${
                         activeImageIdx === idx
-                          ? 'border-fuchsia-400 ring-2 ring-fuchsia-400/50 shadow-md scale-105'
+                          ? 'border-fuchsia-400 ring-2 ring-fuchsia-400/50 shadow-md scale-102'
                           : 'border-white/15 opacity-60 hover:opacity-100 hover:border-white/40'
                       }`}
                     >
                       <Image
                         src={thumb}
-                        alt={`Page ${idx + 1}`}
+                        alt={`Screen ${idx + 1}`}
                         fill
                         className="object-cover"
                         unoptimized
@@ -578,18 +606,36 @@ export default function ServiceDetailPage() {
                       </span>
                     </button>
                   ))}
-
-                  {totalGalleryImages > 50 && (
-                    <button
-                      type="button"
-                      onClick={() => setIsGridOpen(true)}
-                      className="px-3 py-2 rounded-lg bg-purple-950/60 border border-purple-500/30 text-[11px] font-bold text-purple-200 shrink-0 hover:bg-purple-900/80 cursor-pointer"
-                    >
-                      +{totalGalleryImages - 50} more
-                    </button>
-                  )}
                 </div>
               )}
+
+              {/* Interactive Live Demo Bar */}
+              <div className="mx-4 mt-3 rounded-2xl bg-gradient-to-r from-[#1b0d38]/90 via-[#13082b]/95 to-[#240e42]/90 border border-purple-500/30 p-3 flex items-center justify-between gap-3 shadow-lg shadow-purple-950/40">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-500 flex items-center justify-center text-white shrink-0 shadow-md">
+                    <Globe className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-white tracking-tight">Interactive Live Demo</span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[9px] font-bold">
+                        Live
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-purple-200/70 truncate mt-0.5">
+                      Explore live system, full workflows &amp; interactive sub-pages
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenLiveDemo}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 hover:opacity-95 text-white text-[11px] font-extrabold shrink-0 shadow-md shadow-fuchsia-900/30 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Live Demo</span>
+                  <ExternalLink className="w-3 h-3" />
+                </button>
+              </div>
 
               {/* Title & Info Section */}
               <div className="px-4 pt-3 space-y-2">
@@ -785,16 +831,16 @@ export default function ServiceDetailPage() {
           )}
         </main>
 
-        {/* Full Gallery Grid & Direct Jump Modal */}
+        {/* Full Gallery Grid & Live Demo Modal */}
         {isGridOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-            <div className="relative w-full max-w-2xl max-h-[85vh] rounded-3xl bg-[#0f0b24] border border-purple-500/30 shadow-2xl flex flex-col overflow-hidden">
+            <div className="relative w-full max-w-xl max-h-[85vh] rounded-3xl bg-[#0f0b24] border border-purple-500/30 shadow-2xl flex flex-col overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-purple-500/20 bg-[#140e33]/80">
                 <div className="flex items-center gap-2">
                   <Grid className="w-4 h-4 text-fuchsia-400" />
                   <span className="text-sm font-bold text-white">
-                    All System Pages ({totalGalleryImages})
+                    Preview Screens ({totalGalleryImages})
                   </span>
                 </div>
                 <button
@@ -806,31 +852,26 @@ export default function ServiceDetailPage() {
                 </button>
               </div>
 
-              {/* Jump to Page Input Bar */}
-              <div className="px-5 py-3 border-b border-purple-500/15 bg-[#120b2d]/50 flex items-center justify-between gap-3 flex-wrap">
-                <span className="text-xs text-gray-300 font-medium">
-                  Direct Jump to Page:
-                </span>
-                <form onSubmit={handleJumpToPage} className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalGalleryImages}
-                    value={jumpInput}
-                    onChange={(e) => setJumpInput(e.target.value)}
-                    placeholder={`Page # (1-${totalGalleryImages})`}
-                    className="w-36 px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-500/30 text-white text-xs placeholder:text-gray-500 focus:outline-none focus:border-fuchsia-400"
-                  />
-                  <button
-                    type="submit"
-                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:opacity-90 text-white text-xs font-bold cursor-pointer transition-all active:scale-95"
-                  >
-                    Go
-                  </button>
-                </form>
+              {/* Live Demo Banner inside Modal */}
+              <div className="px-5 py-3 border-b border-purple-500/15 bg-gradient-to-r from-purple-950/60 to-fuchsia-950/60 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 text-xs text-purple-200">
+                  <Globe className="w-4 h-4 text-fuchsia-400 shrink-0" />
+                  <span>Want to test all interactive pages &amp; workflows?</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsGridOpen(false);
+                    handleOpenLiveDemo();
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:opacity-90 text-white text-xs font-bold cursor-pointer transition-all active:scale-95 flex items-center gap-1.5 shadow-md"
+                >
+                  <span>Launch Live Demo</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
               </div>
 
-              {/* Grid of all pages */}
+              {/* Grid of preview screens */}
               <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {galleryImages.map((imgUrl, idx) => (
                   <button
@@ -848,14 +889,14 @@ export default function ServiceDetailPage() {
                   >
                     <Image
                       src={imgUrl}
-                      alt={`Page ${idx + 1}`}
+                      alt={`Screen ${idx + 1}`}
                       fill
                       className="object-cover group-hover:scale-105 transition-transform duration-300"
                       unoptimized
                     />
                     <div className="absolute inset-x-0 bottom-0 py-1 px-2 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-center justify-between">
                       <span className="text-[10px] font-black text-white">
-                        Page {idx + 1}
+                        Screen {idx + 1}
                       </span>
                       {activeImageIdx === idx && (
                         <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400" />
@@ -874,14 +915,22 @@ export default function ServiceDetailPage() {
             {/* Top Bar */}
             <div className="flex items-center justify-between px-4 py-3 bg-black/60 border-b border-white/10 z-20">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-white truncate max-w-[200px] sm:max-w-md">
+                <span className="text-xs font-bold text-white truncate max-w-[180px] sm:max-w-md">
                   {serviceMeta?.title}
                 </span>
                 <span className="text-xs font-bold text-fuchsia-400 bg-fuchsia-950/60 border border-fuchsia-500/30 px-2 py-0.5 rounded-full">
-                  Page {activeImageIdx + 1} / {totalGalleryImages}
+                  Screen {activeImageIdx + 1} / {totalGalleryImages}
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenLiveDemo}
+                  className="px-2.5 py-1.5 rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:opacity-90 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Live Demo</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -891,7 +940,7 @@ export default function ServiceDetailPage() {
                   className="px-2.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
                 >
                   <Grid className="w-3.5 h-3.5" />
-                  <span>All Pages</span>
+                  <span>Screens</span>
                 </button>
                 <button
                   type="button"
@@ -919,7 +968,7 @@ export default function ServiceDetailPage() {
               <div className="relative w-full h-full max-w-6xl flex items-center justify-center">
                 <Image
                   src={currentGalleryImg}
-                  alt={`${serviceMeta?.title} - Page ${activeImageIdx + 1}`}
+                  alt={`${serviceMeta?.title} - Screen ${activeImageIdx + 1}`}
                   fill
                   className="object-contain"
                   unoptimized
@@ -933,7 +982,7 @@ export default function ServiceDetailPage() {
                   <button
                     type="button"
                     onClick={handlePrevImage}
-                    aria-label="Previous Page"
+                    aria-label="Previous Screen"
                     className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/70 hover:bg-black/95 text-white flex items-center justify-center border border-white/20 cursor-pointer shadow-2xl active:scale-95 transition-all z-20"
                   >
                     <ChevronLeft className="w-6 h-6" />
@@ -941,7 +990,7 @@ export default function ServiceDetailPage() {
                   <button
                     type="button"
                     onClick={handleNextImage}
-                    aria-label="Next Page"
+                    aria-label="Next Screen"
                     className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/70 hover:bg-black/95 text-white flex items-center justify-center border border-white/20 cursor-pointer shadow-2xl active:scale-95 transition-all z-20"
                   >
                     <ChevronRight className="w-6 h-6" />
@@ -952,19 +1001,19 @@ export default function ServiceDetailPage() {
 
             {/* Bottom thumbnail selector in lightbox */}
             {totalGalleryImages > 1 && (
-              <div className="w-full bg-black/70 border-t border-white/10 px-4 py-2.5 flex items-center gap-2 overflow-x-auto no-scrollbar z-20">
+              <div className="w-full bg-black/70 border-t border-white/10 px-4 py-2.5 flex items-center justify-center gap-2 overflow-x-auto no-scrollbar z-20">
                 {galleryImages.map((thumb, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => setActiveImageIdx(idx)}
-                    className={`relative w-14 h-9 rounded-md overflow-hidden shrink-0 border transition-all cursor-pointer ${
+                    className={`relative w-16 h-10 rounded-md overflow-hidden shrink-0 border transition-all cursor-pointer ${
                       activeImageIdx === idx
                         ? 'border-fuchsia-400 ring-2 ring-fuchsia-400 scale-105'
                         : 'border-white/15 opacity-50 hover:opacity-100'
                     }`}
                   >
-                    <Image src={thumb} alt={`Page ${idx + 1}`} fill className="object-cover" unoptimized />
+                    <Image src={thumb} alt={`Screen ${idx + 1}`} fill className="object-cover" unoptimized />
                     <span className="absolute bottom-0 right-0.5 text-[7px] font-black text-white bg-black/80 px-0.5 rounded">
                       {idx + 1}
                     </span>
