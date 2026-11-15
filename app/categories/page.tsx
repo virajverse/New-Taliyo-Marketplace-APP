@@ -190,6 +190,7 @@ export default function CategoriesPage() {
                     alt={cat.name}
                     width={70}
                     height={70}
+                    loading="lazy"
                     className="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(217,70,239,0.3)]"
                     unoptimized
                   />

@@ -49,6 +49,12 @@ export default function OrdersPage() {
   const [supportWhatsApp, setSupportWhatsApp] = useState('917042523611');
   const [activeTab, setActiveTab] = useState<OrderStatus>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const PAGE_SIZE = 6;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [activeTab]);
 
   // Load real WhatsApp number from Admin Site Settings (SWR cached)
   useEffect(() => {
@@ -475,8 +481,13 @@ export default function OrdersPage() {
                 </Link>
               )}
             </div>
-          ) : (
-            filteredOrders.map((order) => {
+          ) : (() => {
+            const pagedOrders = filteredOrders.slice(0, visibleCount);
+            const hasMore = filteredOrders.length > visibleCount;
+
+            return (
+              <>
+                {pagedOrders.map((order) => {
               const isActive = order.status === 'active';
               const isCompleted = order.status === 'completed';
               const isPending = order.status === 'pending';
@@ -497,6 +508,7 @@ export default function OrdersPage() {
                           alt={order.title}
                           width={56}
                           height={56}
+                          loading="lazy"
                           className="w-full h-full object-contain"
                           unoptimized
                         />
@@ -634,9 +646,33 @@ export default function OrdersPage() {
                   </div>
                 </div>
               );
-            })
-          )}
-        </main>
+            })}
+
+            {hasMore ? (
+              <div className="pt-4 pb-2 flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                  className="px-5 py-2.5 rounded-full bg-[#181a33] hover:bg-[#202242] border border-purple-500/30 hover:border-purple-400 text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-2"
+                >
+                  <span>Load More Orders</span>
+                  <span className="text-[10px] text-fuchsia-400 bg-fuchsia-950/60 px-2 py-0.5 rounded-full">
+                    +{Math.min(PAGE_SIZE, filteredOrders.length - visibleCount)}
+                  </span>
+                </button>
+                <span className="text-[10px] text-gray-500 font-medium">
+                  Showing {Math.min(visibleCount, filteredOrders.length)} of {filteredOrders.length} orders
+                </span>
+              </div>
+            ) : filteredOrders.length > PAGE_SIZE ? (
+              <div className="pt-4 pb-2 text-center text-[11px] text-gray-500 font-medium">
+                All {filteredOrders.length} orders loaded
+              </div>
+            ) : null}
+          </>
+        );
+      })()}
+  </main>
 
         {/* Floating Bottom Navigation */}
         <BottomNav />

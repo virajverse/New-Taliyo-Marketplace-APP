@@ -314,7 +314,7 @@ export default function ServiceDetailPage() {
 
   const galleryImages = React.useMemo(() => {
     if (serviceMeta?.images && serviceMeta.images.length > 0) {
-      return serviceMeta.images.slice(0, 5);
+      return serviceMeta.images;
     }
     return [serviceMeta?.imageSrc || '/assets/hero_laptop_clean.png'];
   }, [serviceMeta]);
@@ -669,6 +669,8 @@ export default function ServiceDetailPage() {
                         src={thumb}
                         alt={`Screen ${idx + 1}`}
                         fill
+                        loading="lazy"
+                        sizes="84px"
                         className="object-cover"
                         unoptimized
                       />
@@ -964,6 +966,8 @@ export default function ServiceDetailPage() {
                                 src={item.imageSrc}
                                 alt={item.title}
                                 fill
+                                loading="lazy"
+                                sizes="(max-width: 640px) 50vw, 280px"
                                 className="object-cover group-hover:scale-105 transition-transform duration-300"
                                 unoptimized
                               />
@@ -1217,7 +1221,7 @@ export default function ServiceDetailPage() {
                         : 'border-white/15 opacity-50 hover:opacity-100'
                     }`}
                   >
-                    <Image src={thumb} alt={`Screen ${idx + 1}`} fill className="object-cover" unoptimized />
+                    <Image src={thumb} alt={`Screen ${idx + 1}`} fill loading="lazy" sizes="64px" className="object-cover" unoptimized />
                     <span className="absolute bottom-0 right-0.5 text-[7px] font-black text-white bg-black/80 px-0.5 rounded">
                       {idx + 1}
                     </span>

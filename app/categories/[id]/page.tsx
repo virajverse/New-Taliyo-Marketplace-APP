@@ -47,6 +47,12 @@ export default function CategoryDetailPage() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [wishlist, setWishlist] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const PAGE_SIZE = 8;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [activeSubcat, sortBy]);
 
   useEffect(() => {
     const syncWishlist = async () => {
@@ -352,75 +358,107 @@ export default function CategoryDetailPage() {
               );
             }
 
+            const pagedServices = visibleServices.slice(0, visibleCount);
+            const hasMore = visibleServices.length > visibleCount;
+
+            const renderLoadMore = () => (
+              hasMore ? (
+                <div className="pt-6 pb-2 flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                    className="px-5 py-2.5 rounded-full bg-[#181a33] hover:bg-[#202242] border border-purple-500/30 hover:border-purple-400 text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-2"
+                  >
+                    <span>Load More Systems</span>
+                    <span className="text-[10px] text-fuchsia-400 bg-fuchsia-950/60 px-2 py-0.5 rounded-full">
+                      +{Math.min(PAGE_SIZE, visibleServices.length - visibleCount)}
+                    </span>
+                  </button>
+                  <span className="text-[10px] text-gray-500 font-medium">
+                    Showing {Math.min(visibleCount, visibleServices.length)} of {visibleServices.length} systems
+                  </span>
+                </div>
+              ) : visibleServices.length > PAGE_SIZE ? (
+                <div className="pt-6 pb-2 text-center text-[11px] text-gray-500 font-medium">
+                  All {visibleServices.length} systems loaded
+                </div>
+              ) : null
+            );
+
             if (viewMode === 'grid') {
               return (
-                <div className="grid grid-cols-2 gap-3">
-                  {visibleServices.map((svc) => (
-                    <Link
-                      key={svc.id}
-                      href={`/services/${svc.slug}`}
-                      className="group rounded-[22px] bg-[#111226]/90 border border-purple-500/20 hover:border-purple-400/50 overflow-hidden shadow-xl transition-all duration-300 flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="w-full aspect-[4/3] bg-[#1b143a] relative overflow-hidden">
-                          <Image
-                            src={svc.imageSrc}
-                            alt={svc.title}
-                            fill
-                            className="object-cover group-hover:scale-105 transition-transform duration-500"
-                            unoptimized
-                          />
-                          {svc.badge && (
-                            <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/60 border border-purple-400/30 text-[9px] font-bold text-white backdrop-blur-md">
-                              {svc.badge}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={(e) => handleToggleWishlist(svc.id, e)}
-                            aria-label="Save to Wishlist"
-                            className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 border border-white/15 flex items-center justify-center text-white backdrop-blur-md hover:bg-black/70 transition-all cursor-pointer z-10"
-                          >
-                            <Heart
-                              className={`w-3.5 h-3.5 transition-colors ${
-                                wishlist[svc.id] ? 'fill-rose-500 text-rose-500' : 'text-gray-200'
-                              }`}
-                            />
-                          </button>
-                        </div>
-                        <div className="p-2.5">
-                          <h3 className="text-xs font-extrabold text-white leading-snug line-clamp-2 group-hover:text-fuchsia-300 transition-colors">
-                            {svc.title}
-                          </h3>
-                          <p className="text-[10px] text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                            {svc.description}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="px-2.5 pb-2.5 pt-1.5 border-t border-purple-500/15 flex items-center justify-between">
+                <div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {pagedServices.map((svc) => (
+                      <Link
+                        key={svc.id}
+                        href={`/services/${svc.slug}`}
+                        className="group rounded-[22px] bg-[#111226]/90 border border-purple-500/20 hover:border-purple-400/50 overflow-hidden shadow-xl transition-all duration-300 flex flex-col justify-between"
+                      >
                         <div>
-                          <span className="text-[8px] text-gray-400 uppercase font-semibold block leading-none">
-                            Starting at
-                          </span>
-                          <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 to-white">
-                            {svc.price > 0 ? `₹${svc.price.toLocaleString('en-IN')}` : 'Custom Quote'}
-                          </span>
+                          <div className="w-full aspect-[4/3] bg-[#1b143a] relative overflow-hidden">
+                            <Image
+                              src={svc.imageSrc}
+                              alt={svc.title}
+                              fill
+                              loading="lazy"
+                              sizes="(max-width: 640px) 50vw, 300px"
+                              className="object-cover group-hover:scale-105 transition-transform duration-500"
+                              unoptimized
+                            />
+                            {svc.badge && (
+                              <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/60 border border-purple-400/30 text-[9px] font-bold text-white backdrop-blur-md">
+                                {svc.badge}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleWishlist(svc.id, e)}
+                              aria-label="Save to Wishlist"
+                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 border border-white/15 flex items-center justify-center text-white backdrop-blur-md hover:bg-black/70 transition-all cursor-pointer z-10"
+                            >
+                              <Heart
+                                className={`w-3.5 h-3.5 transition-colors ${
+                                  wishlist[svc.id] ? 'fill-rose-500 text-rose-500' : 'text-gray-200'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <div className="p-2.5">
+                            <h3 className="text-xs font-extrabold text-white leading-snug line-clamp-2 group-hover:text-fuchsia-300 transition-colors">
+                              {svc.title}
+                            </h3>
+                            <p className="text-[10px] text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                              {svc.description}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-0.5 text-[10px]">
-                          <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                          <span className="font-bold text-white">{svc.rating > 0 ? svc.rating : 'New'}</span>
+
+                        <div className="px-2.5 pb-2.5 pt-1.5 border-t border-purple-500/15 flex items-center justify-between">
+                          <div>
+                            <span className="text-[8px] text-gray-400 uppercase font-semibold block leading-none">
+                              Starting at
+                            </span>
+                            <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 to-white">
+                              {svc.price > 0 ? `₹${svc.price.toLocaleString('en-IN')}` : 'Custom Quote'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-0.5 text-[10px]">
+                            <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                            <span className="font-bold text-white">{svc.rating > 0 ? svc.rating : 'New'}</span>
+                          </div>
                         </div>
-                      </div>
-                    </Link>
-                  ))}
+                      </Link>
+                    ))}
+                  </div>
+                  {renderLoadMore()}
                 </div>
               );
             }
 
             return (
               <div className="space-y-3">
-                {visibleServices.map((svc) => (
+                {pagedServices.map((svc) => (
                   <Link
                     key={svc.id}
                     href={`/services/${svc.slug}`}
@@ -432,6 +470,8 @@ export default function CategoryDetailPage() {
                           src={svc.imageSrc}
                           alt={svc.title}
                           fill
+                          loading="lazy"
+                          sizes="96px"
                           className="object-cover group-hover:scale-105 transition-transform duration-500"
                           unoptimized
                         />
@@ -485,6 +525,7 @@ export default function CategoryDetailPage() {
                     </div>
                   </Link>
                 ))}
+                {renderLoadMore()}
               </div>
             );
           })()}

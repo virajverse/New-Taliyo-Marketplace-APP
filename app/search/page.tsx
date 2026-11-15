@@ -50,6 +50,13 @@ export default function SearchPage() {
   const [allServices, setAllServices] = useState<SearchResultItem[]>([]);
   const [dbCategories, setDbCategories] = useState<{ id: string; label: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const PAGE_SIZE = 8;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
+  // Reset pagination when search or filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [searchQuery, activeCategory, priceFilter, ratingFilter, deliveryFilter, sortBy]);
 
   // Sync initial ?q= param and saved wishlist IDs
   useEffect(() => {
@@ -565,29 +572,125 @@ export default function SearchPage() {
             <div className="py-20 text-center text-xs text-gray-400">
               No services found matching your search.
             </div>
-          ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-2 gap-3">
-              {filteredResults.map((item) => (
-                <div
-                  key={item.id}
-                  className="group relative rounded-[22px] bg-[#121326] border border-purple-500/20 hover:border-purple-400/50 shadow-xl overflow-hidden transition-all flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-[#1a0f35] to-[#0d071d] overflow-hidden">
+          ) : (() => {
+            const pagedResults = filteredResults.slice(0, visibleCount);
+            const hasMore = filteredResults.length > visibleCount;
+
+            const renderLoadMore = () => (
+              hasMore ? (
+                <div className="pt-6 pb-2 flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                    className="px-5 py-2.5 rounded-full bg-[#181a33] hover:bg-[#202242] border border-purple-500/30 hover:border-purple-400 text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-2"
+                  >
+                    <span>Load More Systems</span>
+                    <span className="text-[10px] text-fuchsia-400 bg-fuchsia-950/60 px-2 py-0.5 rounded-full">
+                      +{Math.min(PAGE_SIZE, filteredResults.length - visibleCount)}
+                    </span>
+                  </button>
+                  <span className="text-[10px] text-gray-500 font-medium">
+                    Showing {Math.min(visibleCount, filteredResults.length)} of {filteredResults.length} services
+                  </span>
+                </div>
+              ) : filteredResults.length > PAGE_SIZE ? (
+                <div className="pt-6 pb-2 text-center text-[11px] text-gray-500 font-medium">
+                  All {filteredResults.length} services loaded
+                </div>
+              ) : null
+            );
+
+            if (viewMode === 'grid') {
+              return (
+                <div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {pagedResults.map((item) => (
+                      <div
+                        key={item.id}
+                        className="group relative rounded-[22px] bg-[#121326] border border-purple-500/20 hover:border-purple-400/50 shadow-xl overflow-hidden transition-all flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-[#1a0f35] to-[#0d071d] overflow-hidden">
+                            <Link href={`/services/${item.slug}`} className="block w-full h-full">
+                              <Image
+                                src={item.imageSrc}
+                                alt={item.title}
+                                fill
+                                loading="lazy"
+                                sizes="(max-width: 640px) 50vw, 300px"
+                                className="object-cover transition-transform group-hover:scale-105"
+                                unoptimized
+                              />
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={(e) => toggleWishlist(item.id, e)}
+                              aria-label="Wishlist"
+                              className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all cursor-pointer"
+                            >
+                              <Heart
+                                className={`w-3.5 h-3.5 transition-colors ${
+                                  wishlist[item.id] ? 'fill-pink-500 text-pink-500' : 'text-gray-300'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <Link href={`/services/${item.slug}`} className="block p-3">
+                            <h2 className="font-bold text-white text-xs sm:text-sm leading-snug line-clamp-2 group-hover:text-purple-300 transition-colors">
+                              {item.title}
+                            </h2>
+                            <p className="mt-1 text-[11px] text-purple-200/70 line-clamp-2 leading-relaxed">
+                              {item.description}
+                            </p>
+                          </Link>
+                        </div>
+                        <div className="px-3 pb-3 pt-2 border-t border-purple-500/15 flex items-center justify-between">
+                          <div>
+                            <span className="text-[9px] text-gray-400 block leading-none">Starting at</span>
+                            <span className="text-xs sm:text-sm font-extrabold text-white">
+                              {item.price > 0 ? `₹${item.price.toLocaleString('en-IN')}` : 'Custom Quote'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-0.5 text-[11px] font-bold text-white">
+                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                            <span>{item.rating > 0 ? item.rating : 'New'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {renderLoadMore()}
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-3.5">
+                {pagedResults.map((item) => (
+                  <div
+                    key={item.id}
+                    className="group relative rounded-[24px] bg-[#121326] border border-purple-500/20 hover:border-purple-400/50 shadow-xl shadow-black/50 overflow-hidden transition-all flex flex-col sm:flex-row"
+                  >
+                    {/* Left Thumbnail */}
+                    <div className="relative w-full sm:w-44 h-36 sm:h-auto bg-gradient-to-br from-[#1a0f35] to-[#0d071d] flex items-center justify-center overflow-hidden flex-shrink-0">
                       <Link href={`/services/${item.slug}`} className="block w-full h-full">
                         <Image
                           src={item.imageSrc}
                           alt={item.title}
-                          fill
-                          className="object-cover transition-transform group-hover:scale-105"
+                          width={200}
+                          height={120}
+                          loading="lazy"
                           unoptimized
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
                         />
                       </Link>
+
+                      {/* Wishlist Heart */}
                       <button
                         type="button"
                         onClick={(e) => toggleWishlist(item.id, e)}
                         aria-label="Wishlist"
-                        className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all cursor-pointer"
+                        className="absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all hover:scale-110 active:scale-90 cursor-pointer"
                       >
                         <Heart
                           className={`w-3.5 h-3.5 transition-colors ${
@@ -596,110 +699,57 @@ export default function SearchPage() {
                         />
                       </button>
                     </div>
-                    <Link href={`/services/${item.slug}`} className="block p-3">
-                      <h2 className="font-bold text-white text-xs sm:text-sm leading-snug line-clamp-2 group-hover:text-purple-300 transition-colors">
-                        {item.title}
-                      </h2>
-                      <p className="mt-1 text-[11px] text-purple-200/70 line-clamp-2 leading-relaxed">
-                        {item.description}
-                      </p>
-                    </Link>
-                  </div>
-                  <div className="px-3 pb-3 pt-2 border-t border-purple-500/15 flex items-center justify-between">
-                    <div>
-                      <span className="text-[9px] text-gray-400 block leading-none">Starting at</span>
-                      <span className="text-xs sm:text-sm font-extrabold text-white">
-                        {item.price > 0 ? `₹${item.price.toLocaleString('en-IN')}` : 'Custom Quote'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-0.5 text-[11px] font-bold text-white">
-                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                      <span>{item.rating > 0 ? item.rating : 'New'}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            filteredResults.map((item) => (
-            <div
-              key={item.id}
-              className="group relative rounded-[24px] bg-[#121326] border border-purple-500/20 hover:border-purple-400/50 shadow-xl shadow-black/50 overflow-hidden transition-all flex flex-col sm:flex-row"
-            >
-              {/* Left Thumbnail */}
-              <div className="relative w-full sm:w-44 h-36 sm:h-auto bg-gradient-to-br from-[#1a0f35] to-[#0d071d] flex items-center justify-center overflow-hidden flex-shrink-0">
-                <Link href={`/services/${item.slug}`} className="block w-full h-full">
-                  <Image
-                    src={item.imageSrc}
-                    alt={item.title}
-                    width={200}
-                    height={120}
-                    unoptimized
-                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                  />
-                </Link>
 
-                {/* Wishlist Heart */}
-                <button
-                  type="button"
-                  onClick={(e) => toggleWishlist(item.id, e)}
-                  aria-label="Wishlist"
-                  className="absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all hover:scale-110 active:scale-90 cursor-pointer"
-                >
-                  <Heart
-                    className={`w-3.5 h-3.5 transition-colors ${
-                      wishlist[item.id] ? 'fill-pink-500 text-pink-500' : 'text-gray-300'
-                    }`}
-                  />
-                </button>
+                    {/* Right Details Block */}
+                    <div className="p-3.5 flex-1 flex flex-col justify-between">
+                      <Link href={`/services/${item.slug}`} className="block">
+                        <h2 className="font-bold text-white text-sm sm:text-base leading-snug group-hover:text-purple-300 transition-colors">
+                          {item.title}
+                        </h2>
+                        <p className="mt-1 text-xs text-purple-200/70 line-clamp-2 leading-relaxed">
+                          {item.description}
+                        </p>
+
+                        {/* Rating */}
+                        <div className="mt-2.5 flex items-center gap-2 text-xs">
+                          <div className="flex items-center gap-1 font-bold text-white">
+                            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                            {item.rating > 0 ? (
+                              <>
+                                <span>{item.rating}</span>
+                                <span className="text-gray-400 font-normal">({item.reviewsCount})</span>
+                              </>
+                            ) : (
+                              <span className="text-gray-400 font-normal">New System</span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+
+                      {/* Price & CTA Button */}
+                      <div className="mt-3.5 pt-2.5 border-t border-purple-500/15 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] text-gray-400 block leading-none">Starting at</span>
+                          <span className="text-base font-extrabold text-white">
+                            {item.price > 0 ? `₹${item.price.toLocaleString('en-IN')}` : 'Custom Quote'}
+                          </span>
+                        </div>
+
+                        <Link
+                          href={`/services/${item.slug}`}
+                          className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-xs font-bold shadow-md shadow-purple-900/40 hover:opacity-95 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                        >
+                          <span>View Details</span>
+                          <span>→</span>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {renderLoadMore()}
               </div>
-
-              {/* Right Details Block */}
-              <div className="p-3.5 flex-1 flex flex-col justify-between">
-                <Link href={`/services/${item.slug}`} className="block">
-                  <h2 className="font-bold text-white text-sm sm:text-base leading-snug group-hover:text-purple-300 transition-colors">
-                    {item.title}
-                  </h2>
-                  <p className="mt-1 text-xs text-purple-200/70 line-clamp-2 leading-relaxed">
-                    {item.description}
-                  </p>
-
-                  {/* Rating */}
-                  <div className="mt-2.5 flex items-center gap-2 text-xs">
-                    <div className="flex items-center gap-1 font-bold text-white">
-                      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                      {item.rating > 0 ? (
-                        <>
-                          <span>{item.rating}</span>
-                          <span className="text-gray-400 font-normal">({item.reviewsCount})</span>
-                        </>
-                      ) : (
-                        <span className="text-gray-400 font-normal">New System</span>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-
-                {/* Price & CTA Button */}
-                <div className="mt-3.5 pt-2.5 border-t border-purple-500/15 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-gray-400 block leading-none">Starting at</span>
-                    <span className="text-base font-extrabold text-white">
-                      {item.price > 0 ? `₹${item.price.toLocaleString('en-IN')}` : 'Custom Quote'}
-                    </span>
-                  </div>
-
-                  <Link
-                    href={`/services/${item.slug}`}
-                    className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-xs font-bold shadow-md shadow-purple-900/40 hover:opacity-95 hover:scale-[1.02] active:scale-[0.98] transition-all"
-                  >
-                    <span>View Details</span>
-                    <span>→</span>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          )))}
+            );
+          })()}
         </main>
 
         {/* Bottom Navigation */}
