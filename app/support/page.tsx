@@ -391,14 +391,10 @@ export default function SupportPage() {
                 </p>
               </div>
 
-              <div className="relative w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0 flex items-center justify-center">
-                <Image
-                  src="/assets/support_hero_art.png"
-                  alt="Customer Support Assistant"
-                  width={96}
-                  height={96}
-                  className="w-full h-full object-contain drop-shadow-[0_0_20px_rgba(217,70,239,0.4)]"
-                />
+              <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 rounded-3xl bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-500 p-0.5 shadow-xl shadow-fuchsia-950/60 flex items-center justify-center">
+                <div className="w-full h-full bg-[#140a2d] rounded-[22px] flex items-center justify-center">
+                  <Headphones className="w-8 h-8 sm:w-10 sm:h-10 text-fuchsia-400 drop-shadow-[0_0_12px_rgba(217,70,239,0.8)]" />
+                </div>
               </div>
             </div>
           </div>

@@ -83,6 +83,7 @@ export default function SearchPage() {
       rating_count?: number | null;
       price_min?: number | null;
       images?: string[] | null;
+      slug?: string | null;
       service_plans?: Array<{ price_min?: number | null; estimated_delivery_time?: string | null }> | null;
     }
 
@@ -138,9 +139,9 @@ export default function SearchPage() {
               reviewsCount: Number(s.rating_count || 0),
               ordersCount: '',
               price: minPrice,
-              slug: s.id,
+              slug: s.slug || s.id,
               category: s.category_id || 'All',
-              imageSrc: s.images?.[0] || '/assets/search_svc_1.png',
+              imageSrc: s.images?.[0] || '/assets/hero_laptop_clean.png',
               minDeliveryDays,
             };
           });
@@ -633,6 +634,7 @@ export default function SearchPage() {
                     alt={item.title}
                     width={200}
                     height={120}
+                    unoptimized
                     className="w-full h-full object-cover transition-transform group-hover:scale-105"
                   />
                 </Link>

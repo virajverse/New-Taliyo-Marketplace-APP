@@ -13,13 +13,14 @@ export default function AiAdvisorCard() {
     >
       <div className="relative z-10 flex items-center justify-between gap-3">
         {/* Left: Cyborg Avatar */}
-        <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 flex items-center justify-center rounded-2xl overflow-hidden">
+        <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 flex items-center justify-center rounded-2xl overflow-hidden bg-[#0d071c] border border-purple-500/20">
           <Image
             src="/assets/cyborg_clean.png"
             alt="Project Advisor"
             width={80}
             height={80}
-            className="w-full h-full object-cover"
+            unoptimized
+            className="w-full h-full object-cover scale-105"
           />
         </div>
 

@@ -77,6 +77,7 @@ export default function WishlistPage() {
         rating_count?: number | null;
         price_min?: number | null;
         images?: string[] | null;
+        slug?: string | null;
         service_plans?: Array<{ price_min?: number | null }> | null;
       }
 
@@ -96,7 +97,7 @@ export default function WishlistPage() {
         return {
           id: rowId,
           serviceId: s.id,
-          slug: s.id,
+          slug: s.slug || s.id,
           title: s.title || 'Custom Service',
           subtitle: cleanDesc.slice(0, 65) + (cleanDesc.length > 65 ? '...' : ''),
           badge: s.is_featured ? 'Featured' : 'Verified',
@@ -107,7 +108,7 @@ export default function WishlistPage() {
           ordersCount: '',
           price: minPrice > 0 ? `₹${minPrice.toLocaleString('en-IN')}` : 'Custom Quote',
           priceRaw: minPrice,
-          thumbnail: s.images?.[0] || '/assets/wishlist_thumb_1.png',
+          thumbnail: s.images?.[0] || '/assets/hero_laptop_clean.png',
         };
       };
 
@@ -367,15 +368,12 @@ export default function WishlistPage() {
               </p>
             </div>
 
-            {/* Authentic Hero Graphic */}
-            <div className="relative w-24 h-24 sm:w-28 sm:h-28 shrink-0 flex items-center justify-center">
-              <Image
-                src="/assets/wishlist_hero_graphic.png"
-                alt="Favorite Services"
-                fill
-                className="object-contain drop-shadow-[0_10px_20px_rgba(217,70,239,0.35)]"
-                priority
-              />
+            {/* Authentic Hero Graphic: Glowing 3D Heart Badge */}
+            <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-pink-600/30 to-purple-600/30 blur-xl animate-pulse" />
+              <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-[#2a133f] to-[#160c28] border border-pink-500/30 flex items-center justify-center shadow-lg shadow-pink-900/40">
+                <Heart className="w-8 h-8 sm:w-10 sm:h-10 text-pink-400 fill-pink-500/30 drop-shadow-[0_4px_12px_rgba(244,63,94,0.6)]" />
+              </div>
             </div>
           </div>
         </div>
@@ -491,6 +489,7 @@ export default function WishlistPage() {
                       src={item.thumbnail}
                       alt={item.title}
                       fill
+                      unoptimized
                       className="object-cover group-hover:scale-105 transition-transform duration-300"
                       sizes="(max-width: 640px) 112px, 128px"
                     />

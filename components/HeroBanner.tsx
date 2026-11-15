@@ -173,18 +173,16 @@ export default function HeroBanner() {
               {/* Right Visual Graphic (Fixed compact size to guarantee rectangle proportions) */}
               <div className="w-28 sm:w-36 h-full flex-shrink-0 flex items-center justify-center relative">
                 {slide.isRealLogoBanner && slide.imageUrl ? (
-                  /* Real Taliyo Technologies Logo Banner Graphic */
-                  <div className="w-full h-[90px] rounded-xl bg-white/95 p-2 shadow-xl border border-purple-300/40 flex items-center justify-center transform -rotate-1 hover:rotate-0 transition-transform">
-                    <div className="relative w-full h-full">
-                      <Image
-                        src={slide.imageUrl}
-                        alt="Taliyo Technologies"
-                        fill
-                        className="object-contain"
-                        unoptimized
-                        priority
-                      />
-                    </div>
+                  /* Real Banner Graphic */
+                  <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-purple-500/25 bg-[#0a0a16] shadow-lg flex items-center justify-center">
+                    <Image
+                      src={slide.imageUrl}
+                      alt={slide.title || 'Taliyo Technologies'}
+                      fill
+                      className="object-contain p-1"
+                      unoptimized
+                      priority
+                    />
                   </div>
                 ) : slide.imageSrc ? (
                   /* Banner Artwork */

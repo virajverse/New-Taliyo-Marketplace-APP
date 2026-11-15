@@ -34,6 +34,7 @@ interface BookingInfo {
   startedDate: string;
   targetDate: string;
   status: string;
+  imageSrc?: string;
 }
 
 export default function OrderMilestoneTrackerPage() {
@@ -98,6 +99,17 @@ export default function OrderMilestoneTrackerPage() {
 
           const isCancelledOrder = String(booking.status || '').toLowerCase() === 'cancelled';
 
+          let realImage: string | undefined = undefined;
+          try {
+            const rawCart = typeof booking.cart_items === 'string' ? JSON.parse(booking.cart_items) : booking.cart_items;
+            if (Array.isArray(rawCart) && rawCart.length > 0) {
+              const itemImg = rawCart[0]?.imageSrc || rawCart[0]?.images || (Array.isArray(rawCart[0]?.images) ? rawCart[0].images[0] : null);
+              if (itemImg && typeof itemImg === 'string') {
+                realImage = itemImg;
+              }
+            }
+          } catch {}
+
           setBookingInfo({
             id: booking.id,
             orderNumber: `#TLY${booking.id.slice(0, 6).toUpperCase()}`,
@@ -107,6 +119,7 @@ export default function OrderMilestoneTrackerPage() {
             startedDate: started,
             targetDate: isCancelledOrder ? 'Cancelled' : '10–14 Days',
             status: booking.status || 'pending',
+            imageSrc: realImage,
           });
 
           // Fetch progress steps from Redis-cached catalog API
@@ -319,14 +332,14 @@ export default function OrderMilestoneTrackerPage() {
                 </div>
               </div>
 
-              {/* Right 3D Laptop Art */}
-              <div className="relative w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0 flex items-center justify-center">
+              {/* Right Project Artwork / Preview */}
+              <div className="relative w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0 rounded-2xl overflow-hidden border border-purple-500/30 bg-[#170e30] flex items-center justify-center shadow-lg">
                 <Image
-                  src="/assets/tracker_hero_laptop.png"
-                  alt="Project Thumbnail"
-                  width={96}
-                  height={96}
-                  className="w-full h-full object-contain drop-shadow-[0_0_20px_rgba(217,70,239,0.4)]"
+                  src={bookingInfo.imageSrc || '/assets/hero_laptop_clean.png'}
+                  alt={bookingInfo.title}
+                  fill
+                  className="object-cover"
+                  unoptimized
                 />
               </div>
             </div>

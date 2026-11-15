@@ -55,17 +55,18 @@ interface CouponItem {
 
 const BADGE_AVATAR_STYLES: Record<string, string> = {
   'badge:purple': 'from-purple-600 to-indigo-600',
-  'badge:emerald': 'from-emerald-600 to-teal-600',
   'badge:cyan': 'from-cyan-600 to-blue-600',
+  'badge:emerald': 'from-emerald-600 to-teal-600',
   'badge:amber': 'from-amber-500 to-orange-600',
+  'badge:rose': 'from-rose-500 to-pink-600',
 };
 
 const AVATAR_OPTIONS = [
-  '/assets/profile_avatar_user.png',
   'badge:purple',
-  'badge:emerald',
   'badge:cyan',
+  'badge:emerald',
   'badge:amber',
+  'badge:rose',
 ];
 
 export default function ProfilePage() {
@@ -79,7 +80,7 @@ export default function ProfilePage() {
     name: '',
     email: '',
     phone: '',
-    avatar: '/assets/profile_avatar_user.png',
+    avatar: 'badge:purple',
     isVerified: false,
   });
 
@@ -166,9 +167,9 @@ export default function ProfilePage() {
 
           const loadedPhone = profile?.phone || authUser.phone || '';
           const loadedAvatar =
-            profile?.avatar_url ||
-            authUser.user_metadata?.avatar_url ||
-            '/assets/profile_avatar_user.png';
+            (profile?.avatar_url && profile.avatar_url !== '/assets/profile_avatar_user.png' && profile.avatar_url) ||
+            (authUser.user_metadata?.avatar_url && authUser.user_metadata.avatar_url !== '/assets/profile_avatar_user.png' && authUser.user_metadata.avatar_url) ||
+            'badge:purple';
 
           setUser({
             name: loadedName,
@@ -385,6 +386,7 @@ export default function ProfilePage() {
                       src={user.avatar}
                       alt={user.name}
                       fill
+                      unoptimized
                       className="object-cover"
                       sizes="80px"
                       priority

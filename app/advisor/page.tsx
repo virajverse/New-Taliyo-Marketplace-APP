@@ -89,13 +89,14 @@ export default function AdvisorPage() {
           {/* Hero Coming Soon Card */}
           <div className="relative rounded-[28px] bg-gradient-to-br from-[#1d0d3d] via-[#120b28] to-[#2b0d4b] border border-purple-500/30 p-6 shadow-2xl overflow-hidden text-center">
             <div className="relative z-10 flex flex-col items-center">
-              <div className="relative w-28 h-28 rounded-3xl bg-[#180c36] border border-purple-400/30 p-2 mb-4 flex items-center justify-center">
+              <div className="relative w-28 h-28 rounded-3xl bg-[#180c36] border border-purple-400/30 p-2 mb-4 flex items-center justify-center overflow-hidden">
                 <Image
                   src="/assets/cyborg_clean.png"
                   alt="Project Advisor"
                   width={104}
                   height={104}
-                  className="w-full h-full object-contain"
+                  unoptimized
+                  className="w-full h-full object-contain scale-105"
                 />
               </div>
 

@@ -97,6 +97,7 @@ export default function OrdersPage() {
             service_title?: string;
             provider_name?: string;
             requirements?: string;
+            cart_items?: unknown;
           }
           const mapped: OrderItem[] = (data as ApiBooking[]).map((b, idx: number) => {
             let st: OrderItem['status'] = 'pending';
@@ -153,6 +154,17 @@ export default function OrdersPage() {
                 ? notesPart
                 : 'End-to-end delivery with full source code ownership & deployment support.';
 
+            let realImage = '/assets/hero_laptop_clean.png';
+            try {
+              const rawCart = typeof b.cart_items === 'string' ? JSON.parse(b.cart_items) : b.cart_items;
+              if (Array.isArray(rawCart) && rawCart.length > 0) {
+                const itemImg = rawCart[0]?.imageSrc || rawCart[0]?.images || (Array.isArray(rawCart[0]?.images) ? rawCart[0].images[0] : null);
+                if (itemImg && typeof itemImg === 'string') {
+                  realImage = itemImg;
+                }
+              }
+            } catch {}
+
             return {
               id: b.id,
               orderNumber: `#TLY${b.id.slice(0, 6).toUpperCase()}`,
@@ -170,12 +182,7 @@ export default function OrdersPage() {
                   : st === 'cancelled'
                   ? 'Status'
                   : 'Est. Delivery',
-              imageSrc:
-                idx % 3 === 0
-                  ? '/assets/order_thumb_1.png'
-                  : idx % 3 === 1
-                  ? '/assets/order_thumb_2.png'
-                  : '/assets/order_thumb_3.png',
+              imageSrc: realImage,
               progressPercent: pct,
             };
           });
@@ -491,6 +498,7 @@ export default function OrdersPage() {
                           width={56}
                           height={56}
                           className="w-full h-full object-contain"
+                          unoptimized
                         />
                       </div>
 

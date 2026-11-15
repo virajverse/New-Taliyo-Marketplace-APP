@@ -28,14 +28,8 @@ export default function CategoriesPage() {
       name: string;
       description?: string | null;
       slug?: string | null;
+      icon?: string | null;
     }
-
-    const images = [
-      '/assets/cat_illust_3.png',
-      '/assets/cat_illust_7.png',
-      '/assets/cat_illust_6.png',
-      '/assets/cat_illust_1.png',
-    ];
 
     return subscribeSmartFetch<{ data?: CategoryRow[] }>(
       '/api/catalog?mode=categories',
@@ -50,13 +44,13 @@ export default function CategoriesPage() {
             if (lower.includes('design') || lower.includes('brand') || lower.includes('growth') || lower.includes('market') || lower.includes('seo')) return 'Growth & Design';
             return 'Digital Systems';
           };
-          const mapped: CategoryCard[] = data.map((cat, idx) => ({
+          const mapped: CategoryCard[] = data.map((cat) => ({
             id: cat.id,
             name: cat.name,
             description: cat.description || 'End-to-end software development and deployment.',
             filterTag: getCategoryTag(cat.name),
             slug: cat.slug || cat.id,
-            imageSrc: images[idx % images.length],
+            imageSrc: cat.icon || '/assets/hero_laptop_clean.png',
           }));
           setCategories(mapped);
         } else {
@@ -197,6 +191,7 @@ export default function CategoriesPage() {
                     width={70}
                     height={70}
                     className="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(217,70,239,0.3)]"
+                    unoptimized
                   />
                 </div>
               </Link>

@@ -47,7 +47,7 @@ export default function FeaturedServices() {
         if (data.length > 0) {
           const mapped: ServiceItem[] = data.map((item, idx) => {
             const rawImages = Array.isArray(item.images) ? item.images : [];
-            const firstImg = rawImages[0] || '/assets/search_svc_1.png';
+            const firstImg = rawImages[0] || '/assets/hero_laptop_clean.png';
             const planPrices = Array.isArray(item.service_plans)
               ? item.service_plans
                   .map((p: { price_min?: number | null }) => Number(p?.price_min || 0))

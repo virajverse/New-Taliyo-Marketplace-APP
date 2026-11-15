@@ -111,9 +111,7 @@ export default function CategoryDetailPage() {
           if (catServices.length > 0) {
             const mapped: CategoryService[] = catServices.map((s, idx) => {
               const rawImages = Array.isArray(s.images) ? s.images : [];
-              const img =
-                rawImages[0] ||
-                (idx % 2 === 0 ? '/assets/cat_illust_1.png' : '/assets/cat_illust_3.png');
+              const img = rawImages[0] || '/assets/hero_laptop_clean.png';
 
               const plans = Array.isArray(s.service_plans) ? s.service_plans : [];
               const planPrices = plans
