@@ -1,21 +1,32 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
+import QRCode from 'qrcode';
 import {
   ArrowLeft,
   Calendar,
   Clock,
   CheckCircle2,
-  Hourglass,
   Circle,
   MessageCircle,
   MessageSquare,
+  QrCode,
+  Building2,
+  Smartphone,
+  Copy,
+  Check,
+  Loader2,
+  ShieldCheck,
+  Star,
+  Download,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import { subscribeSmartFetch } from '@/lib/clientCache';
+import { getAuthHeaders } from '@/lib/supabaseClient';
+import { PAYMENT_CONFIG, generateUpiUri, triggerHapticFeedback } from '@/lib/paymentConfig';
 
 interface Milestone {
   id: number;
@@ -35,6 +46,16 @@ interface BookingInfo {
   targetDate: string;
   status: string;
   imageSrc?: string;
+  paymentMethod?: string;
+  utr?: string | null;
+  paymentVerified?: boolean;
+  advanceAmount?: number;
+  orderSubtotal?: number;
+  remainingBalance?: number;
+  balancePaid?: boolean;
+  balancePendingReview?: boolean;
+  balanceUtr?: string | null;
+  files?: Array<{ name: string; url?: string; path?: string }>;
 }
 
 export default function OrderMilestoneTrackerPage() {
@@ -57,8 +78,39 @@ export default function OrderMilestoneTrackerPage() {
 
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [supportWhatsApp, setSupportWhatsApp] = useState('917042523611');
+  const [gateway, setGateway] = useState({
+    upiId: PAYMENT_CONFIG.upi.id,
+    displayId: PAYMENT_CONFIG.upi.displayId,
+    payeeName: PAYMENT_CONFIG.upi.payeeName,
+    merchantType: PAYMENT_CONFIG.upi.merchantType,
+    bankName: PAYMENT_CONFIG.bank.bankName,
+    accountName: PAYMENT_CONFIG.bank.accountName,
+    accountNumber: PAYMENT_CONFIG.bank.accountNumber,
+    ifsc: PAYMENT_CONFIG.bank.ifsc,
+  });
+  const [balanceMethod, setBalanceMethod] = useState<'upi' | 'bank'>('upi');
+  const [balanceUtrInput, setBalanceUtrInput] = useState('');
+  const [balanceQrUrl, setBalanceQrUrl] = useState('');
+  const [balanceCheck, setBalanceCheck] = useState<{
+    valid?: boolean;
+    duplicate?: boolean;
+    poolMatched?: boolean;
+    message?: string;
+  } | null>(null);
+  const [isCheckingBalanceUtr, setIsCheckingBalanceUtr] = useState(false);
+  const [isSubmittingBalance, setIsSubmittingBalance] = useState(false);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+  const [balanceSuccess, setBalanceSuccess] = useState<string | null>(null);
+  const [copiedBalanceField, setCopiedBalanceField] = useState<string | null>(null);
 
   useEffect(() => {
+    fetch('/api/payment-settings')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (json?.data) setGateway((prev) => ({ ...prev, ...json.data }));
+      })
+      .catch(() => {});
+
     return subscribeSmartFetch<{ settings?: Record<string, string> }>(
       '/api/site-settings',
       'settings',
@@ -77,8 +129,12 @@ export default function OrderMilestoneTrackerPage() {
       try {
         if (!rawId) return;
 
-        // Fetch booking from API (backed by supabaseAdmin to bypass anon RLS)
-        const res = await fetch(`/api/bookings?id=${encodeURIComponent(rawId)}`);
+        // Fetch booking from API (backed by authenticated owner check + supabaseAdmin)
+        const authHeaders = await getAuthHeaders();
+        const res = await fetch(`/api/bookings?id=${encodeURIComponent(rawId)}`, {
+          cache: 'no-store',
+          headers: authHeaders,
+        });
         const json = await res.json();
         const booking = json.data && json.data.length > 0 ? json.data[0] : null;
 
@@ -94,21 +150,78 @@ export default function OrderMilestoneTrackerPage() {
           const cleanPrice = booking.service_price
             ? booking.service_price.toString().startsWith('₹')
               ? booking.service_price
-              : `₹${booking.service_price}`
+              : `₹${Number(booking.service_price).toLocaleString('en-IN')}`
             : 'Verified Custom Plan';
 
           const isCancelledOrder = String(booking.status || '').toLowerCase() === 'cancelled';
 
-          let realImage: string | undefined = undefined;
+          let parsedNotes: Record<string, unknown> = {};
+          try {
+            parsedNotes = booking.additional_notes ? JSON.parse(String(booking.additional_notes)) : {};
+          } catch {
+            parsedNotes = {};
+          }
+
+          let rawCartArr: Array<Record<string, unknown>> = [];
           try {
             const rawCart = typeof booking.cart_items === 'string' ? JSON.parse(booking.cart_items) : booking.cart_items;
-            if (Array.isArray(rawCart) && rawCart.length > 0) {
-              const itemImg = rawCart[0]?.imageSrc || rawCart[0]?.images || (Array.isArray(rawCart[0]?.images) ? rawCart[0].images[0] : null);
-              if (itemImg && typeof itemImg === 'string') {
-                realImage = itemImg;
-              }
-            }
+            if (Array.isArray(rawCart)) rawCartArr = rawCart;
           } catch {}
+
+          let realImage: string | undefined = undefined;
+          if (rawCartArr.length > 0) {
+            const itemImg =
+              rawCartArr[0]?.imageSrc ||
+              rawCartArr[0]?.images ||
+              (Array.isArray(rawCartArr[0]?.images) ? rawCartArr[0].images[0] : null);
+            if (itemImg && typeof itemImg === 'string') {
+              realImage = itemImg;
+            }
+          }
+
+          let deliveryDays: number | null =
+            typeof parsedNotes.deliveryDays === 'number' ? parsedNotes.deliveryDays : null;
+          if (deliveryDays === null && rawCartArr.length > 0) {
+            const daysList = rawCartArr
+              .map((c) => {
+                if (typeof c?.deliveryDays === 'number') return c.deliveryDays;
+                if (String(c?.packageName || '').toLowerCase().includes('source code')) return 0;
+                return null;
+              })
+              .filter((v): v is number => v !== null);
+            if (daysList.length > 0) deliveryDays = Math.max(...daysList);
+          }
+          const targetLabel = isCancelledOrder
+            ? 'Cancelled'
+            : deliveryDays === 0
+              ? 'Instant Digital'
+              : deliveryDays !== null
+                ? `${deliveryDays} Days`
+                : '10–14 Days';
+
+          const advanceAmt = Number(parsedNotes.advanceAmount || 0);
+          let orderSubtotal = Number(parsedNotes.orderSubtotal || 0);
+          if (orderSubtotal <= 0 && rawCartArr.length > 0) {
+            const cartSum = rawCartArr.reduce(
+              (s, item) => s + Number(item?.price || 0) * (Number(item?.quantity || 1) || 1),
+              0,
+            );
+            orderSubtotal = Math.max(0, cartSum - Number(parsedNotes.discountAmount || 0));
+          }
+          const remainingBalance =
+            !isCancelledOrder && advanceAmt > 0 && orderSubtotal > advanceAmt && !parsedNotes.balancePaid
+              ? Math.max(0, orderSubtotal - advanceAmt)
+              : 0;
+
+          const bookingFiles = Array.isArray(booking.files)
+            ? (booking.files as Array<{ name?: string; url?: string; path?: string }>)
+                .filter((f) => f && (f.url || f.path))
+                .map((f, idx) => ({
+                  name: f.name || f.path || `Deliverable ${idx + 1}`,
+                  url: f.url,
+                  path: f.path,
+                }))
+            : [];
 
           setBookingInfo({
             id: booking.id,
@@ -117,9 +230,19 @@ export default function OrderMilestoneTrackerPage() {
             planName: cleanPrice,
             provider: booking.provider_name || 'Taliyo Technologies',
             startedDate: started,
-            targetDate: isCancelledOrder ? 'Cancelled' : '10–14 Days',
+            targetDate: targetLabel,
             status: booking.status || 'pending',
             imageSrc: realImage,
+            paymentMethod: String(parsedNotes.paymentMethod || ''),
+            utr: (parsedNotes.utr as string) || null,
+            paymentVerified: Boolean(parsedNotes.paymentVerified),
+            advanceAmount: advanceAmt,
+            orderSubtotal,
+            remainingBalance,
+            balancePaid: Boolean(parsedNotes.balancePaid),
+            balancePendingReview: Boolean(parsedNotes.balancePendingReview),
+            balanceUtr: (parsedNotes.balanceUtr as string) || null,
+            files: bookingFiles,
           });
 
           // Fetch progress steps from Redis-cached catalog API
@@ -200,6 +323,151 @@ export default function OrderMilestoneTrackerPage() {
 
   const completedCount = milestones.filter((m) => m.status === 'completed').length;
   const progressPercentage = milestones.length > 0 ? Math.round((completedCount / milestones.length) * 100) : 0;
+
+  const balanceAmount = Number(bookingInfo.remainingBalance || 0);
+  const showBalanceBox =
+    balanceAmount > 0 &&
+    !bookingInfo.balancePaid &&
+    !bookingInfo.balancePendingReview &&
+    bookingInfo.status.toLowerCase() !== 'cancelled';
+
+  const balanceUpiUri = useMemo(() => {
+    if (!showBalanceBox || !gateway.upiId || balanceAmount <= 0) return '';
+    return generateUpiUri({
+      upiId: gateway.upiId,
+      payeeName: gateway.payeeName,
+      amount: balanceAmount,
+      orderRef: `${bookingInfo.orderNumber}-BAL`,
+      note: `Balance ${bookingInfo.title}`,
+    });
+  }, [showBalanceBox, gateway.upiId, gateway.payeeName, balanceAmount, bookingInfo.orderNumber, bookingInfo.title]);
+
+  useEffect(() => {
+    if (!balanceUpiUri) {
+      setBalanceQrUrl('');
+      return;
+    }
+    let mounted = true;
+    QRCode.toDataURL(balanceUpiUri, {
+      width: 240,
+      margin: 1.5,
+      color: { dark: '#0f172a', light: '#ffffff' },
+      errorCorrectionLevel: 'M',
+    })
+      .then((url) => {
+        if (mounted) setBalanceQrUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [balanceUpiUri]);
+
+  const cleanBalanceBankRef = balanceUtrInput.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  useEffect(() => {
+    if (!showBalanceBox) return;
+    const clean = balanceMethod === 'bank' ? cleanBalanceBankRef : balanceUtrInput.trim();
+    const ready = balanceMethod === 'bank' ? clean.length >= 8 : /^\d{12}$/.test(clean);
+    if (!ready) {
+      setBalanceCheck(null);
+      setIsCheckingBalanceUtr(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingBalanceUtr(true);
+    const timer = setTimeout(() => {
+      getAuthHeaders()
+        .then((authHeaders) =>
+          fetch('/api/payments/verify-utr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({ utr: clean, amount: balanceAmount, method: balanceMethod }),
+          }),
+        )
+        .then((r) => r.json())
+        .then((data) => {
+          if (!cancelled) setBalanceCheck(data);
+        })
+        .catch(() => {
+          if (!cancelled) setBalanceCheck(null);
+        })
+        .finally(() => {
+          if (!cancelled) setIsCheckingBalanceUtr(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [showBalanceBox, balanceMethod, balanceUtrInput, cleanBalanceBankRef, balanceAmount]);
+
+  const handleCopyBalanceField = (key: string, val: string) => {
+    try {
+      navigator.clipboard.writeText(val);
+      setCopiedBalanceField(key);
+      setTimeout(() => setCopiedBalanceField(null), 2000);
+    } catch {}
+  };
+
+  const handleSubmitBalancePayment = async () => {
+    const cleanRef = balanceMethod === 'bank' ? cleanBalanceBankRef : balanceUtrInput.trim();
+    if (balanceMethod === 'upi' && !/^\d{12}$/.test(cleanRef)) {
+      setBalanceError('Please enter your 12-digit UPI UTR / Ref number.');
+      return;
+    }
+    if (balanceMethod === 'bank' && cleanRef.length < 8) {
+      setBalanceError('Please enter a valid Bank Reference number (at least 8 characters).');
+      return;
+    }
+    if (isCheckingBalanceUtr) {
+      setBalanceError('Verification check in progress, please wait a moment...');
+      return;
+    }
+    if (balanceCheck?.duplicate || balanceCheck?.valid === false) {
+      setBalanceError(balanceCheck.message || 'Invalid or duplicate payment reference.');
+      return;
+    }
+
+    setBalanceError(null);
+    setIsSubmittingBalance(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({
+          id: bookingInfo.id,
+          action: 'pay_balance',
+          payment_method: balanceMethod,
+          utr: cleanRef,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setBalanceError(json?.error || 'Could not submit balance payment.');
+        return;
+      }
+      triggerHapticFeedback([100, 50, 100]);
+      setBookingInfo((prev) => ({
+        ...prev,
+        balancePaid: Boolean(json?.balanceAutoVerified),
+        balancePendingReview: !json?.balanceAutoVerified,
+        balanceUtr: cleanRef,
+        remainingBalance: json?.balanceAutoVerified ? 0 : prev.remainingBalance,
+      }));
+      setBalanceSuccess(
+        json?.balanceAutoVerified
+          ? `Remaining ₹${balanceAmount.toLocaleString('en-IN')} auto-verified via ${json.verifiedSource || 'Settlement Pool'}!`
+          : `Reference ${cleanRef} submitted for admin verification.`,
+      );
+    } catch {
+      setBalanceError('Network error submitting balance payment.');
+    } finally {
+      setIsSubmittingBalance(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#07070d] text-white flex flex-col items-center">
@@ -479,6 +747,241 @@ export default function OrderMilestoneTrackerPage() {
             </div>
           </div>
 
+          {/* Payment & Balance Verification Section (Custom UPI / Bank Auto-Verify) */}
+          {(bookingInfo.utr || showBalanceBox || bookingInfo.balancePendingReview || bookingInfo.balancePaid) && (
+            <div className="rounded-[22px] bg-[#121326]/95 border border-purple-500/25 p-4 space-y-3 shadow-lg">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-xs font-extrabold text-white">Payment Verification</span>
+                </div>
+                {bookingInfo.balancePaid || bookingInfo.paymentVerified ? (
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/35 text-emerald-300 text-[10px] font-bold">
+                    {bookingInfo.balancePaid && Number(bookingInfo.advanceAmount || 0) > 0
+                      ? 'Full Balance Verified'
+                      : 'Auto-Verified'}
+                  </span>
+                ) : bookingInfo.balancePendingReview ? (
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/35 text-amber-300 text-[10px] font-bold">
+                    Balance Verifying
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/35 text-amber-300 text-[10px] font-bold">
+                    Verification Pending
+                  </span>
+                )}
+              </div>
+
+              {bookingInfo.utr && (
+                <div className="text-[11px] text-gray-300 flex items-center justify-between bg-[#0c0d1c] rounded-xl px-3 py-2 border border-purple-500/15">
+                  <span>Initial Ref / UTR ({(bookingInfo.paymentMethod || 'upi').toUpperCase()})</span>
+                  <span className="font-mono font-bold text-purple-200">{bookingInfo.utr}</span>
+                </div>
+              )}
+
+              {bookingInfo.balanceUtr && (
+                <div className="text-[11px] text-gray-300 flex items-center justify-between bg-[#0c0d1c] rounded-xl px-3 py-2 border border-purple-500/15">
+                  <span>Balance Ref / UTR</span>
+                  <span className="font-mono font-bold text-emerald-300">{bookingInfo.balanceUtr}</span>
+                </div>
+              )}
+
+              {balanceSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/35 text-xs text-emerald-300 font-semibold">
+                  {balanceSuccess}
+                </div>
+              )}
+
+              {showBalanceBox && (
+                <div className="pt-2 border-t border-purple-500/15 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[11px] font-bold text-amber-300 block">
+                        Remaining Balance Due
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        Pay balance via your verified UPI QR or Bank NEFT/IMPS
+                      </span>
+                    </div>
+                    <span className="text-base font-black text-white">
+                      ₹{balanceAmount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[#0c0d1c] border border-purple-500/20">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBalanceMethod('upi');
+                        setBalanceError(null);
+                        setBalanceCheck(null);
+                      }}
+                      className={`py-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer ${
+                        balanceMethod === 'upi'
+                          ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>UPI QR Auto-Verify</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBalanceMethod('bank');
+                        setBalanceError(null);
+                        setBalanceCheck(null);
+                      }}
+                      className={`py-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer ${
+                        balanceMethod === 'bank'
+                          ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Building2 className="w-3.5 h-3.5" />
+                      <span>Bank NEFT / IMPS</span>
+                    </button>
+                  </div>
+
+                  {balanceMethod === 'upi' ? (
+                    <div className="flex flex-col items-center gap-2.5 bg-[#0c0d1c] rounded-2xl p-3 border border-purple-500/15">
+                      {balanceQrUrl && (
+                        <div className="p-2 rounded-2xl bg-white">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={balanceQrUrl} alt="Balance UPI QR" className="w-36 h-36 object-contain" />
+                        </div>
+                      )}
+                      <div className="w-full flex items-center justify-between gap-2 text-[11px] px-2">
+                        <span className="text-gray-400">VPA: <strong className="text-purple-200 font-mono">{gateway.displayId}</strong></span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBalanceField('upi', gateway.upiId)}
+                          className="inline-flex items-center gap-1 text-fuchsia-400 font-bold cursor-pointer"
+                        >
+                          {copiedBalanceField === 'upi' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>Copy</span>
+                        </button>
+                      </div>
+                      {balanceUpiUri && (
+                        <a
+                          href={balanceUpiUri}
+                          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-extrabold flex items-center justify-center gap-1.5"
+                        >
+                          <Smartphone className="w-3.5 h-3.5" />
+                          <span>Open UPI App (₹{balanceAmount.toLocaleString('en-IN')})</span>
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 bg-[#0c0d1c] rounded-2xl p-3 border border-purple-500/15 text-[11px]">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Bank</span>
+                        <span className="font-bold text-white">{gateway.bankName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">A/C No</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBalanceField('acc', gateway.accountNumber)}
+                          className="font-mono font-bold text-purple-200 inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>{gateway.accountNumber}</span>
+                          {copiedBalanceField === 'acc' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-fuchsia-400" />}
+                        </button>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">IFSC</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBalanceField('ifsc', gateway.ifsc)}
+                          className="font-mono font-bold text-white inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>{gateway.ifsc}</span>
+                          {copiedBalanceField === 'ifsc' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-fuchsia-400" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      inputMode={balanceMethod === 'upi' ? 'numeric' : 'text'}
+                      maxLength={balanceMethod === 'upi' ? 12 : 22}
+                      placeholder={
+                        balanceMethod === 'upi'
+                          ? 'Enter 12-digit UPI UTR ID'
+                          : 'Enter NEFT / IMPS Ref Number (8-22 chars)'
+                      }
+                      value={balanceUtrInput}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setBalanceUtrInput(
+                          balanceMethod === 'upi'
+                            ? raw.replace(/\D/g, '').slice(0, 12)
+                            : raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 22),
+                        );
+                        setBalanceError(null);
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#171936] border border-purple-500/25 text-white placeholder-gray-500 text-xs font-mono focus:outline-none focus:border-purple-400"
+                    />
+                    {isCheckingBalanceUtr && (
+                      <p className="text-[11px] text-purple-300 font-semibold flex items-center gap-1.5">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Checking reference against settlement pool...
+                      </p>
+                    )}
+                    {!isCheckingBalanceUtr && balanceCheck?.message && (
+                      <p className={`text-[11px] font-semibold ${balanceCheck.duplicate || balanceCheck.valid === false ? 'text-rose-400' : 'text-emerald-300'}`}>
+                        {balanceCheck.message}
+                      </p>
+                    )}
+                    {balanceError && <p className="text-[11px] text-rose-400 font-semibold">{balanceError}</p>}
+
+                    <button
+                      type="button"
+                      disabled={isSubmittingBalance}
+                      onClick={handleSubmitBalancePayment}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+                    >
+                      {isSubmittingBalance ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      <span>Submit Balance Reference</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Deliverables Section (when uploaded) */}
+          {bookingInfo.files && bookingInfo.files.length > 0 && (
+            <div className="rounded-[22px] bg-[#121326]/95 border border-purple-500/25 p-4 space-y-2.5 shadow-lg">
+              <span className="text-xs font-extrabold text-white block">Deliverables & Files</span>
+              <div className="space-y-2">
+                {bookingInfo.files.map((file, idx) =>
+                  file.url ? (
+                    <a
+                      key={idx}
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#0c0d1c] border border-purple-500/20 text-xs text-purple-200 hover:border-purple-400"
+                    >
+                      <span className="truncate font-semibold">{file.name}</span>
+                      <Download className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
+                    </a>
+                  ) : (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#0c0d1c] border border-purple-500/15 text-xs text-gray-300"
+                    >
+                      <span className="truncate">{file.name}</span>
+                    </div>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Quick Actions Strip */}
           <div className="pt-2 grid grid-cols-2 gap-2.5">
             <Link
@@ -498,6 +1001,16 @@ export default function OrderMilestoneTrackerPage() {
               <MessageCircle className="w-4 h-4 text-emerald-400" />
               <span>Direct WhatsApp</span>
             </a>
+
+            {(bookingInfo.status.toLowerCase() === 'delivered' || bookingInfo.status.toLowerCase() === 'completed') && (
+              <Link
+                href="/reviews"
+                className="col-span-2 py-3 px-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
+              >
+                <Star className="w-4 h-4" />
+                <span>Rate This Service</span>
+              </Link>
+            )}
           </div>
         </>
       )}

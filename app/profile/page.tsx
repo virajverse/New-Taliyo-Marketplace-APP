@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import { usePwaInstall } from '@/components/PwaInstallProvider';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, getAuthHeaders } from '@/lib/supabaseClient';
 import { getGuestWishlistIds } from '@/lib/wishlistClient';
 
 interface ProfileUser {
@@ -118,7 +118,11 @@ export default function ProfilePage() {
       try {
         const params = new URLSearchParams({ userId });
         if (email) params.set('email', email);
-        const res = await fetch(`/api/bookings?${params.toString()}`, { cache: 'no-store' });
+        const authHeaders = await getAuthHeaders();
+        const res = await fetch(`/api/bookings?${params.toString()}`, {
+          cache: 'no-store',
+          headers: authHeaders,
+        });
         const json = await res.json();
         if (json.data) {
           interface BookingStatusRow {
@@ -185,7 +189,7 @@ export default function ProfilePage() {
           setSelectedAvatar(loadedAvatar);
 
           loadRealStats(authUser.id, loadedEmail);
-          loadCoupons(loadedEmail);
+          loadCoupons();
 
           try {
             const { count } = await supabase
@@ -210,10 +214,10 @@ export default function ProfilePage() {
       }
     }
 
-    async function loadCoupons(viewerEmail?: string) {
+    async function loadCoupons() {
       try {
-        const qs = viewerEmail ? `?email=${encodeURIComponent(viewerEmail)}` : '';
-        const res = await fetch(`/api/coupons${qs}`, { cache: 'no-store' });
+        const authHeaders = await getAuthHeaders();
+        const res = await fetch('/api/coupons', { cache: 'no-store', headers: authHeaders });
         const json = await res.json();
         if (json.data && Array.isArray(json.data)) {
           setLiveCoupons(json.data);
@@ -317,6 +321,7 @@ export default function ProfilePage() {
 
         {isAuthenticated ? (
           <button
+            type="button"
             onClick={() => setIsEditProfileOpen(true)}
             aria-label="Edit Profile"
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#151733] border border-purple-500/30 text-purple-200 text-xs font-bold hover:bg-[#1f2247] hover:text-white transition-all shadow-sm cursor-pointer"
@@ -516,6 +521,7 @@ export default function ProfilePage() {
 
             {/* 3. Live Coupons & Offers */}
             <button
+              type="button"
               onClick={() => setIsCouponsOpen(true)}
               className="w-full flex items-center justify-between p-3.5 hover:bg-[#161833] transition-colors group cursor-pointer text-left"
             >
@@ -698,6 +704,7 @@ export default function ProfilePage() {
         <div className="flex flex-col gap-2">
           <div className="rounded-[22px] bg-[#0f1123]/95 border border-purple-500/15 overflow-hidden shadow-sm">
             <button
+              type="button"
               onClick={() => setIsLogoutOpen(true)}
               className="w-full flex items-center justify-between p-3.5 hover:bg-rose-500/[0.08] transition-colors group cursor-pointer text-left"
             >
@@ -733,6 +740,7 @@ export default function ProfilePage() {
                 <h3 className="text-lg font-bold text-white">Personal Information</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setIsEditProfileOpen(false)}
                 className="w-8 h-8 rounded-full bg-[#181a33] flex items-center justify-center text-gray-400 hover:text-white cursor-pointer"
               >
@@ -846,6 +854,7 @@ export default function ProfilePage() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsCouponsOpen(false)}
                 className="w-8 h-8 rounded-full bg-[#181a33] flex items-center justify-center text-gray-400 hover:text-white cursor-pointer"
               >
@@ -894,6 +903,7 @@ export default function ProfilePage() {
 
                       {/* Copy Code Button */}
                       <button
+                        type="button"
                         onClick={() => handleCopyCode(coupon.code)}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
                           copiedCoupon === coupon.code

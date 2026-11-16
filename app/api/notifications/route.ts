@@ -1,14 +1,31 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { bumpCacheVersions, cachedFetch, invalidateCachePrefix } from '@/lib/redisCache';
+import { resolveAuthUserFromRequest } from '@/lib/authServer';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
-    const url = new URL(req.url);
-    const userId = url.searchParams.get('userId')?.trim() || '';
-    const cacheKey = userId ? `taliyo:notifications:user:${userId}` : 'taliyo:notifications:public';
+    const authHeader = req.headers.get('authorization') || '';
+    let verifiedUserId = '';
+
+    if (authHeader.startsWith('Bearer ')) {
+      const auth = await resolveAuthUserFromRequest(req);
+      if (auth.user) {
+        verifiedUserId = auth.user.id;
+      } else {
+        return NextResponse.json(
+          { data: [], error: auth.error || 'Unauthorized' },
+          { status: auth.status || 401 },
+        );
+      }
+    }
+
+    // Never trust arbitrary ?userId= without valid JWT — guests only see public broadcasts (user_id IS NULL)
+    const cacheKey = verifiedUserId
+      ? `taliyo:notifications:user:${verifiedUserId}`
+      : 'taliyo:notifications:public';
 
     const { data, cacheLayer } = await cachedFetch(
       cacheKey,
@@ -18,10 +35,11 @@ export async function GET(req: NextRequest) {
           .from('notifications')
           .select('id, title, message, type, related_type, related_id, is_read, created_at, user_id')
           .neq('type', 'admin_alert')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(80);
 
-        if (userId) {
-          query = query.or(`user_id.is.null,user_id.eq.${userId}`);
+        if (verifiedUserId) {
+          query = query.or(`user_id.is.null,user_id.eq.${verifiedUserId}`);
         } else {
           query = query.is('user_id', null);
         }
@@ -40,7 +58,9 @@ export async function GET(req: NextRequest) {
       { data },
       {
         headers: {
-          'Cache-Control': userId ? 'private, max-age=15' : 'public, s-maxage=30, stale-while-revalidate=60',
+          'Cache-Control': verifiedUserId
+            ? 'private, max-age=15'
+            : 'public, s-maxage=30, stale-while-revalidate=60',
           'X-Taliyo-Cache': cacheLayer,
         },
       },
@@ -53,22 +73,25 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const auth = await resolveAuthUserFromRequest(req);
+    if (!auth.user) {
+      return NextResponse.json(
+        { error: auth.error || 'Authentication required' },
+        { status: auth.status || 401 },
+      );
+    }
+    const verifiedUserId = auth.user.id;
+
     const body = await req.json();
-    const { id, is_read, mark_all, userId } = body;
+    const { id, is_read, mark_all } = body;
 
     if (mark_all) {
-      let query = supabaseAdmin
+      await supabaseAdmin
         .from('notifications')
         .update({ is_read: true })
-        .neq('type', 'admin_alert');
+        .neq('type', 'admin_alert')
+        .or(`user_id.is.null,user_id.eq.${verifiedUserId}`);
 
-      if (userId) {
-        query = query.or(`user_id.is.null,user_id.eq.${String(userId)}`);
-      } else {
-        query = query.is('user_id', null);
-      }
-
-      await query;
       await Promise.all([
         invalidateCachePrefix('taliyo:notifications:'),
         bumpCacheVersions('notifications'),
@@ -80,7 +103,10 @@ export async function PUT(req: NextRequest) {
       await supabaseAdmin
         .from('notifications')
         .update({ is_read: is_read ?? true })
-        .eq('id', id);
+        .eq('id', String(id))
+        .neq('type', 'admin_alert')
+        .or(`user_id.is.null,user_id.eq.${verifiedUserId}`);
+
       await Promise.all([
         invalidateCachePrefix('taliyo:notifications:'),
         bumpCacheVersions('notifications'),

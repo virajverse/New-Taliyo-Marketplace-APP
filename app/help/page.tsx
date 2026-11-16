@@ -99,6 +99,7 @@ export default function HelpFAQPage() {
       <header className="sticky top-0 z-40 bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => router.back()}
             aria-label="Go Back"
             className="w-10 h-10 rounded-full bg-[#121429] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/40 hover:bg-[#1a1d3d] transition-all shadow-sm cursor-pointer"
@@ -137,6 +138,7 @@ export default function HelpFAQPage() {
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white"
               >
@@ -177,6 +179,7 @@ export default function HelpFAQPage() {
             const isSelected = selectedCategory === cat.id;
             return (
               <button
+                type="button"
                 key={cat.id}
                 onClick={() => setSelectedCategory(selectedCategory === cat.id ? 'all' : cat.id)}
                 className={`p-3.5 rounded-2xl border transition-all flex flex-col items-center justify-center text-center gap-2 cursor-pointer ${
@@ -205,6 +208,7 @@ export default function HelpFAQPage() {
               Frequently Asked Questions
             </h2>
             <button
+              type="button"
               onClick={() => setShowAllFaqs((prev) => !prev)}
               className="text-xs font-bold text-fuchsia-400 hover:text-fuchsia-300 transition-colors cursor-pointer"
             >
@@ -245,6 +249,7 @@ export default function HelpFAQPage() {
                   }`}
                 >
                   <button
+                    type="button"
                     onClick={() => toggleAccordion(faq.id)}
                     className="w-full p-4 flex items-center justify-between gap-3 text-left cursor-pointer"
                   >

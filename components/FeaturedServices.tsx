@@ -20,58 +20,65 @@ export interface ServiceItem {
   providerName?: string;
 }
 
-export default function FeaturedServices() {
-  const [services, setServices] = useState<ServiceItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export interface FeaturedRowInput {
+  id: string;
+  title: string;
+  price_min?: number | null;
+  rating_average?: number | null;
+  rating_count?: number | null;
+  images?: string[] | null;
+  provider_name?: string | null;
+  slug?: string | null;
+  is_featured?: boolean | null;
+  service_plans?: Array<{ price_min?: number | null }> | null;
+}
+
+function mapFeaturedRows(data: FeaturedRowInput[]): ServiceItem[] {
+  if (!Array.isArray(data) || data.length === 0) return [];
+  return data.map((item, idx) => {
+    const rawImages = Array.isArray(item.images) ? item.images : [];
+    const firstImg = rawImages[0] || '/assets/hero_laptop_clean.png';
+    const planPrices = Array.isArray(item.service_plans)
+      ? item.service_plans
+          .map((p) => Number(p?.price_min || 0))
+          .filter((v) => v > 0)
+      : [];
+    const minPrice = Number(item.price_min || 0) || (planPrices.length ? Math.min(...planPrices) : 0);
+
+    return {
+      id: item.id,
+      title: item.title,
+      badge: item.is_featured ? 'Featured' : idx === 0 ? 'Popular' : 'Available',
+      badgeType: item.is_featured ? 'popular' : 'trending',
+      rating: Number(item.rating_average || 0),
+      reviewsCount: Number(item.rating_count || 0),
+      price: minPrice,
+      imageSrc: firstImg,
+      slug: item.slug || item.id,
+      providerName: item.provider_name || 'Taliyo Technologies',
+    };
+  });
+}
+
+export default function FeaturedServices({
+  initialServices,
+}: {
+  initialServices?: FeaturedRowInput[];
+}) {
+  const hasInitial = Boolean(initialServices && initialServices.length > 0);
+  const [services, setServices] = useState<ServiceItem[]>(() =>
+    hasInitial && initialServices ? mapFeaturedRows(initialServices) : [],
+  );
+  const [isLoading, setIsLoading] = useState(!hasInitial);
   const [wishlist, setWishlist] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    interface FeaturedRow {
-      id: string;
-      title: string;
-      price_min?: number | null;
-      rating_average?: number | null;
-      rating_count?: number | null;
-      images?: string[] | null;
-      provider_name?: string | null;
-      slug?: string | null;
-      is_featured?: boolean;
-      service_plans?: Array<{ price_min?: number | null }> | null;
-    }
-
-    const unsubServices = subscribeSmartFetch<{ data?: FeaturedRow[] }>(
+    const unsubServices = subscribeSmartFetch<{ data?: FeaturedRowInput[] }>(
       '/api/catalog?mode=featured',
       'catalog',
       (json) => {
         const data = Array.isArray(json?.data) ? json.data : [];
-        if (data.length > 0) {
-          const mapped: ServiceItem[] = data.map((item, idx) => {
-            const rawImages = Array.isArray(item.images) ? item.images : [];
-            const firstImg = rawImages[0] || '/assets/hero_laptop_clean.png';
-            const planPrices = Array.isArray(item.service_plans)
-              ? item.service_plans
-                  .map((p: { price_min?: number | null }) => Number(p?.price_min || 0))
-                  .filter((v: number) => v > 0)
-              : [];
-            const minPrice = Number(item.price_min || 0) || (planPrices.length ? Math.min(...planPrices) : 0);
-
-            return {
-              id: item.id,
-              title: item.title,
-              badge: item.is_featured ? 'Featured' : idx === 0 ? 'Popular' : 'Available',
-              badgeType: item.is_featured ? 'popular' : 'trending',
-              rating: Number(item.rating_average || 0),
-              reviewsCount: Number(item.rating_count || 0),
-              price: minPrice,
-              imageSrc: firstImg,
-              slug: item.slug || item.id,
-              providerName: item.provider_name || 'Taliyo Technologies',
-            };
-          });
-          setServices(mapped);
-        } else {
-          setServices([]);
-        }
+        setServices(mapFeaturedRows(data));
         setIsLoading(false);
       },
       {

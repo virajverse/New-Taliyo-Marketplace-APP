@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, trackUserLoginAndPwaMap } from '@/lib/supabaseClient';
 import { CheckCircle2, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
@@ -38,6 +38,7 @@ function AuthCallbackContent() {
         }
 
         if (session) {
+          trackUserLoginAndPwaMap(session.user?.id, session.user?.email);
           if (isMounted) {
             setStatus('success');
             setMessage(
@@ -56,6 +57,7 @@ function AuthCallbackContent() {
         const { data: authListener } = supabase.auth.onAuthStateChange(
           async (event, currentSession) => {
             if (currentSession && isMounted) {
+              trackUserLoginAndPwaMap(currentSession.user?.id, currentSession.user?.email);
               setStatus('success');
               setMessage('Sign-in complete. Redirecting...');
               setTimeout(() => {

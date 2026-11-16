@@ -15,7 +15,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, getAuthHeaders } from '@/lib/supabaseClient';
 import { invalidateClientCache, subscribeSmartFetch } from '@/lib/clientCache';
 
 interface ReviewItem {
@@ -153,43 +153,56 @@ export default function ReviewsPage() {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      await fetch('/api/reviews', {
+      if (!user) {
+        setIsSubmitting(false);
+        showToast('Please sign in to submit a verified review.');
+        return;
+      }
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/reviews', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           customer_name: author,
-          customer_email: user?.email || null,
+          customer_email: user.email || null,
           rating: newRating,
           review_text: reviewBody,
-          is_approved: true,
-          is_featured: false,
         }),
       });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setIsSubmitting(false);
+        showToast(json?.error || 'Could not publish review.');
+        return;
+      }
       invalidateClientCache('reviews');
+      invalidateClientCache('catalog');
+
+      const created: ReviewItem = {
+        id: json?.data?.id || `rev-${Date.now()}`,
+        userName: author,
+        userAvatarInitial: author[0]?.toUpperCase() || 'V',
+        userAvatarColor: 'from-purple-500 to-fuchsia-600',
+        isVerified: true,
+        isFeatured: false,
+        rating: newRating,
+        timeAgo: 'Just now',
+        title: newTitle.trim(),
+        content: newContent.trim(),
+        projectTag: 'Verified Client',
+      };
+
+      setReviews([created, ...reviews]);
+      setIsSubmitting(false);
+      setIsWriteModalOpen(false);
+      setNewTitle('');
+      setNewContent('');
+      showToast('Thank you! Your verified review has been published.');
     } catch (dbErr) {
       console.warn('Review insert notice:', dbErr);
+      setIsSubmitting(false);
+      showToast('Network error while publishing review.');
     }
-
-    const created: ReviewItem = {
-      id: `rev-${Date.now()}`,
-      userName: author,
-      userAvatarInitial: author[0]?.toUpperCase() || 'V',
-      userAvatarColor: 'from-purple-500 to-fuchsia-600',
-      isVerified: true,
-      isFeatured: false,
-      rating: newRating,
-      timeAgo: 'Just now',
-      title: newTitle.trim(),
-      content: newContent.trim(),
-      projectTag: 'Verified Client',
-    };
-
-    setReviews([created, ...reviews]);
-    setIsSubmitting(false);
-    setIsWriteModalOpen(false);
-    setNewTitle('');
-    setNewContent('');
-    showToast('Thank you! Your review has been published.');
   };
 
   const ratingStats = useMemo(() => {
@@ -257,6 +270,7 @@ export default function ReviewsPage() {
       <header className="sticky top-0 z-40 bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => router.back()}
             aria-label="Go Back"
             className="w-10 h-10 rounded-full bg-[#121429] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/40 hover:bg-[#1a1d3d] transition-all shadow-sm cursor-pointer"
@@ -275,6 +289,7 @@ export default function ReviewsPage() {
 
         {/* Write Review Button */}
         <button
+          type="button"
           onClick={() => setIsWriteModalOpen(true)}
           className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-xs font-bold shadow-md shadow-fuchsia-600/30 hover:opacity-95 transition-all flex items-center gap-1.5 cursor-pointer"
         >
@@ -345,6 +360,7 @@ export default function ReviewsPage() {
               const isSelected = selectedCategory === tab.key;
               return (
                 <button
+                  type="button"
                   key={tab.key}
                   onClick={() => setSelectedCategory(tab.key)}
                   className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
@@ -386,6 +402,7 @@ export default function ReviewsPage() {
                   <div className="absolute right-0 top-full mt-1.5 w-44 rounded-2xl bg-[#0f1124] border border-purple-500/30 p-1.5 shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150">
                     {(['recent', 'highest'] as SortOption[]).map((opt) => (
                       <button
+                        type="button"
                         key={opt}
                         onClick={() => {
                           setSortBy(opt);
@@ -534,6 +551,7 @@ export default function ReviewsPage() {
                 <h3 className="text-lg font-bold text-white">Write a Review</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setIsWriteModalOpen(false)}
                 className="w-8 h-8 rounded-full bg-[#181a33] flex items-center justify-center text-gray-400 hover:text-white"
               >

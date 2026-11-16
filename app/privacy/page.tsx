@@ -101,6 +101,7 @@ export default function PrivacyPolicyPage() {
       <header className="sticky top-0 z-40 bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => router.back()}
             aria-label="Go Back"
             className="w-10 h-10 rounded-full bg-[#121429] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/40 hover:bg-[#1a1d3d] transition-all shadow-sm cursor-pointer"
@@ -155,6 +156,7 @@ export default function PrivacyPolicyPage() {
                 }`}
               >
                 <button
+                  type="button"
                   onClick={() => toggleSection(sec.id)}
                   className="w-full p-4 flex items-center justify-between gap-3 text-left cursor-pointer"
                 >

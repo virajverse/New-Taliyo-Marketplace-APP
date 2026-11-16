@@ -27,13 +27,18 @@ import {
 } from 'lucide-react';
 import { fetchSavedWishlistServiceIds, toggleWishlistService } from '@/lib/wishlistClient';
 import { subscribeSmartFetch } from '@/lib/clientCache';
+import { getSourceCodeSpec, extractUsdFromPlan } from '@/lib/sourceCodePricing';
 
 interface PackageOption {
-  id: 'basic' | 'standard' | 'premium';
+  id: 'template' | 'basic' | 'standard' | 'premium' | string;
   name: string;
   badge?: string;
   subtitle: string;
   price: number;
+  usdPrice: number;
+  inrRangeLabel?: string;
+  usdRangeLabel?: string;
+  editionLabel?: string;
   deliveryTime?: string;
   features: string[];
 }
@@ -61,6 +66,7 @@ interface RelatedServiceItem {
 
 interface ServiceMeta {
   id: string;
+  slug: string;
   title: string;
   description: string;
   provider: string;
@@ -91,10 +97,27 @@ export default function ServiceDetailPage() {
   const [isNotFound, setIsNotFound] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [activeTab, setActiveTab] = useState<'packages' | 'details' | 'reviews' | 'faq'>('packages');
-  const [selectedPackage, setSelectedPackage] = useState<'basic' | 'standard' | 'premium'>('standard');
+  const [selectedPackage, setSelectedPackage] = useState<'template' | 'basic' | 'standard' | 'premium' | string>('template');
+  const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
   const [cartAdded, setCartAdded] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    try {
+      const savedCurr = localStorage.getItem('taliyo_currency');
+      if (savedCurr === 'USD' || savedCurr === 'INR') {
+        setCurrency(savedCurr);
+      }
+    } catch {}
+  }, []);
+
+  const handleCurrencyChange = (next: 'INR' | 'USD') => {
+    setCurrency(next);
+    try {
+      localStorage.setItem('taliyo_currency', next);
+    } catch {}
+  };
 
   useEffect(() => {
     const syncCartCount = () => {
@@ -143,6 +166,7 @@ export default function ServiceDetailPage() {
     const unsubService = subscribeSmartFetch<{
       service?: {
         id: string;
+        slug?: string | null;
         title: string;
         description?: string | null;
         provider_name?: string | null;
@@ -167,9 +191,11 @@ export default function ServiceDetailPage() {
       }>;
       plans?: Array<{
         level?: string | null;
+        title?: string | null;
         is_recommended?: boolean;
         description?: string | null;
         price_min?: number | null;
+        price_max?: number | null;
         estimated_delivery_time?: string | null;
         includes?: string[] | null;
         demo_url?: string | null;
@@ -195,10 +221,12 @@ export default function ServiceDetailPage() {
         const plans = Array.isArray(json?.plans) ? json.plans : [];
         const planWithDemo = plans.find((p) => p.demo_url);
         const resolvedDemo = planWithDemo?.demo_url || svc.video_url || null;
+        const svcSlug = svc.slug || rawId;
 
         setIsNotFound(false);
         setServiceMeta({
           id: svc.id,
+          slug: svcSlug,
           title: svc.title,
           description: (svc.description || '').replace(/<[^>]*>?/gm, ''),
           provider: svc.provider_name || 'Taliyo Technologies',
@@ -243,37 +271,75 @@ export default function ServiceDetailPage() {
         });
         setRelatedServices(mappedRelated);
 
+        const starterInr = Number(plans[0]?.price_min || svc.price_min || 0);
+        const sourceSpec = getSourceCodeSpec(svcSlug, starterInr);
+
+        // Per-system Source Code / Theme Sale plan (Static HTML or Next.js / React / PHP frontend code only)
+        const templatePlan: PackageOption = {
+          id: 'template',
+          name: 'Source Code',
+          badge: 'Theme Sale',
+          editionLabel: sourceSpec.editionLabel,
+          subtitle: sourceSpec.note,
+          price: sourceSpec.sourceCodeInr,
+          usdPrice: sourceSpec.sourceCodeUsd,
+          inrRangeLabel: `₹${sourceSpec.sourceCodeInr.toLocaleString('en-IN')} INR (Fixed Theme Sale)`,
+          usdRangeLabel: `$${sourceSpec.sourceCodeUsd} USD (Fixed Theme Sale)`,
+          deliveryTime: 'Instant (0 Days)',
+          features: [
+            `Stack: ${sourceSpec.stackLabel} (${sourceSpec.routesBadge})`,
+            `India Rate: ₹${sourceSpec.sourceCodeInr.toLocaleString('en-IN')} INR | Intl Rate: $${sourceSpec.sourceCodeUsd} USD`,
+            '100% Raw Frontend Code & Assets (Static HTML/CSS/JS or Next.js/React)',
+            'Commercial & Personal License (Lifetime Ownership, 0 Royalties)',
+            'Instant Digital Delivery (ZIP + Setup Docs, UI Code Only)',
+          ],
+        };
+
         if (plans.length > 0) {
           const mappedPlans: PackageOption[] = plans.map((p, idx) => {
             const levelKey = idx === 0 ? 'basic' : idx === 1 ? 'standard' : 'premium';
             const includes = Array.isArray(p.includes) ? p.includes : [];
+            const inrPrice = Number(p.price_min || 0);
+            const { usdMin, usdRangeLabel, inrRangeLabel, cleanSubtitle } = extractUsdFromPlan(
+              p.description,
+              includes,
+              inrPrice,
+            );
 
             return {
               id: levelKey,
               name: p.level ? p.level.charAt(0).toUpperCase() + p.level.slice(1) : `Plan ${idx + 1}`,
               badge: p.is_recommended ? 'Popular' : idx === 2 ? 'Enterprise' : undefined,
-              subtitle: p.description ? p.description.slice(0, 60) + (p.description.length > 60 ? '...' : '') : '',
-              price: Number(p.price_min || 0),
+              subtitle: cleanSubtitle || p.title || 'Complete branded delivery & deployment',
+              price: inrPrice,
+              usdPrice: usdMin,
+              inrRangeLabel,
+              usdRangeLabel,
               deliveryTime: p.estimated_delivery_time || undefined,
-              features: includes.slice(0, 5),
+              features: includes.slice(0, 6),
             };
           });
 
-          setPackages(mappedPlans);
+          const fullPlans = [templatePlan, ...mappedPlans];
+          setPackages(fullPlans);
           setSelectedPackage((prev) =>
-            mappedPlans.some((p) => p.id === prev) ? prev : mappedPlans[1]?.id || mappedPlans[0]?.id || 'basic',
+            fullPlans.some((p) => p.id === prev) ? prev : 'template',
           );
         } else {
+          const fallbackInr = Number(svc.price_min || 0);
+          const fallbackUsd = fallbackInr > 0 ? Math.max(19, Math.round(fallbackInr / 83)) : 0;
           setPackages([
+            templatePlan,
             {
               id: 'basic',
-              name: 'Standard',
-              subtitle: 'Configured service plan',
-              price: Number(svc.price_min || 0),
-              features: ['Source code handover', 'Direct technical support'],
+              name: 'Starter',
+              subtitle: 'Branded frontend setup & 1 production domain deploy',
+              price: fallbackInr,
+              usdPrice: fallbackUsd,
+              features: ['Custom logo & color branding', 'Direct technical support'],
             },
           ]);
-          setSelectedPackage('basic');
+          setSelectedPackage('template');
         }
         setIsLoading(false);
       },
@@ -389,6 +455,7 @@ export default function ServiceDetailPage() {
         packageName: string;
         deliveryDays: number;
         price: number;
+        usdPrice?: number;
         quantity: number;
         imageSrc: string;
       }
@@ -398,14 +465,19 @@ export default function ServiceDetailPage() {
       const existingIdx = cart.findIndex((i) => i.id === itemKey);
       if (existingIdx !== -1) {
         cart[existingIdx].quantity += 1;
+        cart[existingIdx].price = currentPkg.price;
+        cart[existingIdx].usdPrice = currentPkg.usdPrice;
       } else {
         const dtText = String(currentPkg.deliveryTime || '');
         const dtMatch = dtText.match(/\d+/);
-        const parsedDeliveryDays = dtMatch
-          ? /hour|hr/i.test(dtText)
-            ? Math.max(1, Math.ceil(Number(dtMatch[0]) / 24))
-            : Number(dtMatch[0])
-          : 14;
+        const parsedDeliveryDays =
+          currentPkg.id === 'template' || /instant/i.test(dtText)
+            ? 0
+            : dtMatch
+              ? /hour|hr/i.test(dtText)
+                ? Math.max(1, Math.ceil(Number(dtMatch[0]) / 24))
+                : Number(dtMatch[0])
+              : 14;
         cart.push({
           id: itemKey,
           slug: rawId,
@@ -414,6 +486,7 @@ export default function ServiceDetailPage() {
           packageName: currentPkg.name,
           deliveryDays: parsedDeliveryDays,
           price: currentPkg.price,
+          usdPrice: currentPkg.usdPrice,
           quantity: 1,
           imageSrc: serviceMeta.imageSrc || '/assets/cart_thumb_1.png',
         });
@@ -710,48 +783,72 @@ export default function ServiceDetailPage() {
                 </button>
               </div>
 
-              {/* Category Breadcrumbs & Subcategory Pills */}
-              <div className="px-4 pt-3 flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 text-[11px] text-purple-300/80 font-medium overflow-x-auto no-scrollbar">
-                  <Link href="/" className="hover:text-white transition-colors">Home</Link>
-                  <ChevronRight className="w-3 h-3 text-purple-500/60 shrink-0" />
-                  <Link href="/categories" className="hover:text-white transition-colors">Categories</Link>
-                  {serviceMeta.category && (
-                    <>
-                      <ChevronRight className="w-3 h-3 text-purple-500/60 shrink-0" />
-                      <Link
-                        href={`/categories/${serviceMeta.category.slug}`}
-                        className="text-fuchsia-300 font-bold hover:underline truncate max-w-[150px]"
-                      >
-                        {serviceMeta.category.name}
-                      </Link>
-                    </>
-                  )}
-                </div>
-
-                {serviceMeta.subcategory && (
-                  <span className="px-2.5 py-0.5 rounded-full bg-purple-950/70 border border-purple-400/30 text-[10px] font-bold text-purple-200">
-                    {serviceMeta.subcategory.name}
-                  </span>
+              {/* Clean Breadcrumb Row */}
+              <div className="px-4 pt-3 flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
+                <Link href="/" className="hover:text-white transition-colors">Home</Link>
+                <ChevronRight className="w-3 h-3 text-purple-500/50 shrink-0" />
+                <Link href="/categories" className="hover:text-white transition-colors">Categories</Link>
+                {serviceMeta.category && (
+                  <>
+                    <ChevronRight className="w-3 h-3 text-purple-500/50 shrink-0" />
+                    <Link
+                      href={`/categories/${serviceMeta.category.slug}`}
+                      className="text-purple-300 font-semibold hover:text-white truncate max-w-[160px]"
+                    >
+                      {serviceMeta.category.name}
+                    </Link>
+                  </>
                 )}
               </div>
 
               {/* Title & Info Section */}
-              <div className="px-4 pt-3 space-y-2">
-                <div className="flex items-center gap-1.5 text-xs text-purple-300 font-semibold">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>{serviceMeta.provider}</span>
-                  <span className="text-gray-600">•</span>
-                  <span className="text-gray-400 text-[11px]">End-to-End Delivery</span>
+              <div className="px-4 pt-2.5 space-y-2.5">
+                {/* Meta Badges */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {serviceMeta.subcategory && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/30 text-[10px] font-bold text-fuchsia-300 shadow-sm">
+                      {serviceMeta.subcategory.name}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span className="text-gray-300 font-semibold">{serviceMeta.provider}</span>
+                    <span className="text-gray-600">•</span>
+                    <span>Turn-Key System</span>
+                  </div>
                 </div>
 
-                <h1 className="text-lg sm:text-xl font-black text-white tracking-tight leading-snug">
+                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-tight">
                   {serviceMeta.title}
                 </h1>
 
-                <p className="text-xs text-gray-300 leading-relaxed">
+                <p className="text-xs sm:text-sm text-gray-300 leading-relaxed">
                   {serviceMeta.description}
                 </p>
+
+                {/* Trust & Delivery Highlights Ribbon */}
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div className="p-2.5 rounded-2xl bg-[#0f1124]/90 border border-purple-500/15 flex flex-col items-center text-center shadow-sm">
+                    <span className="text-[10px] text-gray-400 font-medium leading-tight">
+                      {selectedPackage === 'template' ? 'Code Delivery' : 'Est. Delivery'}
+                    </span>
+                    <span className="text-xs font-bold text-white mt-0.5">
+                      {selectedPackage === 'template' ? 'Instant (0 Days)' : currentPkg?.deliveryTime || '5–21 Days'}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-2xl bg-[#0f1124]/90 border border-purple-500/15 flex flex-col items-center text-center shadow-sm">
+                    <span className="text-[10px] text-gray-400 font-medium leading-tight">
+                      {selectedPackage === 'template' ? 'Package Scope' : 'Kickoff Advance'}
+                    </span>
+                    <span className="text-xs font-bold text-emerald-400 mt-0.5">
+                      {selectedPackage === 'template' ? 'Frontend Code Only' : '30% Start'}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-2xl bg-[#0f1124]/90 border border-purple-500/15 flex flex-col items-center text-center shadow-sm">
+                    <span className="text-[10px] text-gray-400 font-medium leading-tight">Ownership</span>
+                    <span className="text-xs font-bold text-fuchsia-300 mt-0.5">100% Full IP</span>
+                  </div>
+                </div>
               </div>
 
               {/* Navigation Tabs */}
@@ -795,6 +892,41 @@ export default function ServiceDetailPage() {
               <div className="px-4 pt-4 space-y-4">
                 {activeTab === 'packages' && (
                   <>
+                    {/* Dual Currency Switcher (India INR & International USD) */}
+                    <div className="flex items-center justify-between gap-2 pb-1">
+                      <span className="text-[11px] font-bold text-gray-300">
+                        Choose License / Package
+                      </span>
+                      <div
+                        role="group"
+                        aria-label="Select display currency"
+                        className="inline-flex items-center p-0.5 rounded-full bg-[#111226] border border-purple-500/25"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleCurrencyChange('INR')}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold transition-all cursor-pointer ${
+                            currency === 'INR'
+                              ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-sm'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          ₹ INR (India)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCurrencyChange('USD')}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold transition-all cursor-pointer ${
+                            currency === 'USD'
+                              ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-sm'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          $ USD (Intl)
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Package Selector Cards */}
                     <div
                       className={`grid gap-2 ${
@@ -802,7 +934,9 @@ export default function ServiceDetailPage() {
                           ? 'grid-cols-1'
                           : packages.length === 2
                           ? 'grid-cols-2'
-                          : 'grid-cols-3'
+                          : packages.length === 3
+                          ? 'grid-cols-3'
+                          : 'grid-cols-2 sm:grid-cols-4'
                       }`}
                     >
                       {packages.map((pkg) => (
@@ -826,13 +960,21 @@ export default function ServiceDetailPage() {
                             {pkg.name}
                           </span>
 
-                          <span className="text-[11px] font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 to-white block mt-1">
-                            ₹{pkg.price.toLocaleString('en-IN')}
+                          <span className="text-[12px] font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 to-white block mt-1">
+                            {currency === 'USD'
+                              ? `$${pkg.usdPrice.toLocaleString('en-US')}`
+                              : `₹${pkg.price.toLocaleString('en-IN')}`}
                           </span>
 
-                          {pkg.deliveryTime && (
-                            <span className="text-[9px] text-gray-400 block mt-0.5">
-                              {pkg.deliveryTime}
+                          <span className="text-[9px] text-purple-200/70 font-semibold block">
+                            {currency === 'USD'
+                              ? `₹${pkg.price.toLocaleString('en-IN')} INR`
+                              : `$${pkg.usdPrice.toLocaleString('en-US')} USD`}
+                          </span>
+
+                          {(pkg.editionLabel || pkg.deliveryTime) && (
+                            <span className="text-[9px] text-gray-400 block mt-0.5 truncate">
+                              {pkg.editionLabel || pkg.deliveryTime}
                             </span>
                           )}
                         </button>
@@ -841,24 +983,42 @@ export default function ServiceDetailPage() {
 
                     {/* Selected Package Detailed Breakdown */}
                     <div className="rounded-[24px] bg-[#111226]/90 border border-purple-500/25 p-4 shadow-xl space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
                           <span className="text-xs font-extrabold text-white block">
-                            {currentPkg.name} Package Overview
+                            {currentPkg.name} {currentPkg.id === 'template' ? '(Static / Next.js Theme Sale)' : 'Package Overview'}
                           </span>
-                          <span className="text-[10px] text-purple-200/70 block mt-0.5">
+                          <span className="text-[10px] text-purple-200/75 block mt-0.5 leading-relaxed">
                             {currentPkg.subtitle}
                           </span>
                         </div>
-                        <span className="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-pink-300">
-                          ₹{currentPkg.price.toLocaleString('en-IN')}
-                        </span>
+                        <div className="text-right shrink-0">
+                          <span className="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-pink-300 block">
+                            {currency === 'USD'
+                              ? `$${currentPkg.usdPrice.toLocaleString('en-US')} USD`
+                              : `₹${currentPkg.price.toLocaleString('en-IN')}`}
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-semibold block">
+                            {currency === 'USD'
+                              ? `₹${currentPkg.price.toLocaleString('en-IN')} INR`
+                              : `$${currentPkg.usdPrice.toLocaleString('en-US')} USD`}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Timeline Pill */}
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1b1540] border border-purple-500/30 text-purple-200 text-[10px] font-semibold">
-                        <Clock className="w-3 h-3 text-cyan-400" />
-                        <span>Estimated Delivery: {currentPkg.deliveryTime || '7–10 Days'}</span>
+                      {/* Timeline & Payment Mode Pills */}
+                      <div className="flex items-center flex-wrap gap-2">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1b1540] border border-purple-500/30 text-purple-200 text-[10px] font-semibold">
+                          <Clock className="w-3 h-3 text-cyan-400" />
+                          <span>Estimated Delivery: {currentPkg.deliveryTime || '7–10 Days'}</span>
+                        </div>
+                        <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-emerald-300 text-[10px] font-semibold">
+                          <span>
+                            {currentPkg.id === 'template'
+                              ? 'Theme Sale: Instant Code Zip / Git'
+                              : '30% Advance Kickoff Available'}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Included Features List */}
@@ -1238,11 +1398,22 @@ export default function ServiceDetailPage() {
           <div className="pointer-events-auto w-full max-w-xl rounded-2xl bg-[#0d0a21]/95 border border-purple-500/30 p-3 shadow-2xl backdrop-blur-xl flex items-center justify-between gap-3">
             <div>
               <span className="text-[9px] text-gray-400 uppercase font-semibold block leading-none">
-                Total Price
+                {currentPkg.id === 'template' ? 'Source Code Price' : `${currentPkg.name} Total`}
               </span>
-              <span className="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 via-pink-300 to-white">
-                {currentPkg.price > 0 ? `₹${currentPkg.price.toLocaleString('en-IN')}` : 'Custom Quote'}
+              <span className="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 via-pink-300 to-white block leading-tight mt-0.5">
+                {currentPkg.price > 0
+                  ? currency === 'USD'
+                    ? `$${currentPkg.usdPrice.toLocaleString('en-US')} USD`
+                    : `₹${currentPkg.price.toLocaleString('en-IN')}`
+                  : 'Custom Quote'}
               </span>
+              {currentPkg.price > 0 && (
+                <span className="text-[10px] text-purple-200/70 font-semibold block leading-none mt-0.5">
+                  {currency === 'USD'
+                    ? `₹${currentPkg.price.toLocaleString('en-IN')} INR`
+                    : `$${currentPkg.usdPrice.toLocaleString('en-US')} USD`}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2">

@@ -17,7 +17,7 @@ import {
   Package,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, getAuthHeaders } from '@/lib/supabaseClient';
 import { subscribeSmartFetch } from '@/lib/clientCache';
 
 type OrderStatus = 'all' | 'active' | 'completed' | 'pending' | 'cancelled';
@@ -36,6 +36,7 @@ interface OrderItem {
   deliveryLabel: string;
   imageSrc: string;
   progressPercent: number;
+  remainingBalance?: number;
 }
 
 export default function OrdersPage() {
@@ -90,7 +91,11 @@ export default function OrdersPage() {
         setAuthUser({ id: user.id, email: user.email });
         const params = new URLSearchParams({ userId: user.id });
         if (user.email) params.set('email', user.email);
-        const res = await fetch(`/api/bookings?${params.toString()}`, { cache: 'no-store' });
+        const authHeaders = await getAuthHeaders();
+        const res = await fetch(`/api/bookings?${params.toString()}`, {
+          cache: 'no-store',
+          headers: authHeaders,
+        });
         const json = await res.json();
         const data = json.data;
 
@@ -100,12 +105,14 @@ export default function OrdersPage() {
             status?: string;
             created_at?: string;
             service_price?: string | number;
+            final_price?: number | null;
             service_title?: string;
             provider_name?: string;
             requirements?: string;
             cart_items?: unknown;
+            additional_notes?: string | null;
           }
-          const mapped: OrderItem[] = (data as ApiBooking[]).map((b, idx: number) => {
+          const mapped: OrderItem[] = (data as ApiBooking[]).map((b) => {
             let st: OrderItem['status'] = 'pending';
             let stLabel = 'Pending';
             let pct = 20;
@@ -124,6 +131,32 @@ export default function OrdersPage() {
               pct = 0;
             }
 
+            let parsedNotes: Record<string, unknown> = {};
+            try {
+              parsedNotes = b.additional_notes ? JSON.parse(String(b.additional_notes)) : {};
+            } catch {
+              parsedNotes = {};
+            }
+
+            let rawCartArr: Array<Record<string, unknown>> = [];
+            try {
+              const rawCart = typeof b.cart_items === 'string' ? JSON.parse(b.cart_items) : b.cart_items;
+              if (Array.isArray(rawCart)) rawCartArr = rawCart;
+            } catch {}
+
+            let deliveryDays: number | null =
+              typeof parsedNotes.deliveryDays === 'number' ? parsedNotes.deliveryDays : null;
+            if (deliveryDays === null && rawCartArr.length > 0) {
+              const daysFromCart = rawCartArr
+                .map((c) => {
+                  if (typeof c?.deliveryDays === 'number') return c.deliveryDays;
+                  if (String(c?.packageName || '').toLowerCase().includes('source code')) return 0;
+                  return null;
+                })
+                .filter((v): v is number => v !== null);
+              if (daysFromCart.length > 0) deliveryDays = Math.max(...daysFromCart);
+            }
+
             const createdDate = b.created_at
               ? new Date(b.created_at).toLocaleDateString('en-IN', {
                   day: '2-digit',
@@ -132,21 +165,39 @@ export default function OrdersPage() {
                 })
               : 'Recent';
 
-            const estDate = b.created_at
-              ? new Date(new Date(b.created_at).getTime() + 10 * 24 * 60 * 60 * 1000).toLocaleDateString(
-                  'en-IN',
-                  {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  },
-                )
-              : '7–14 Days';
+            const estDays = deliveryDays !== null ? deliveryDays : 14;
+            const estDate =
+              estDays === 0
+                ? 'Instant Digital'
+                : b.created_at
+                  ? new Date(new Date(b.created_at).getTime() + estDays * 24 * 60 * 60 * 1000).toLocaleDateString(
+                      'en-IN',
+                      {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      },
+                    )
+                  : `${estDays} Days`;
+
+            const advanceAmt = Number(parsedNotes.advanceAmount || 0);
+            let orderSubtotal = Number(parsedNotes.orderSubtotal || 0);
+            if (orderSubtotal <= 0 && rawCartArr.length > 0) {
+              const cartSum = rawCartArr.reduce(
+                (s, item) => s + Number(item?.price || 0) * (Number(item?.quantity || 1) || 1),
+                0,
+              );
+              orderSubtotal = Math.max(0, cartSum - Number(parsedNotes.discountAmount || 0));
+            }
+            const remainingBalance =
+              st !== 'cancelled' && advanceAmt > 0 && orderSubtotal > advanceAmt && !parsedNotes.balancePaid && !parsedNotes.balancePendingReview
+                ? Math.max(0, orderSubtotal - advanceAmt)
+                : 0;
 
             const cleanPrice = b.service_price
               ? b.service_price.toString().startsWith('₹')
                 ? String(b.service_price)
-                : `₹${b.service_price}`
+                : `₹${Number(b.service_price).toLocaleString('en-IN')}`
               : 'Verified Custom Plan';
 
             const rawReq = String(b.requirements || '').trim();
@@ -161,15 +212,15 @@ export default function OrdersPage() {
                 : 'End-to-end delivery with full source code ownership & deployment support.';
 
             let realImage = '/assets/hero_laptop_clean.png';
-            try {
-              const rawCart = typeof b.cart_items === 'string' ? JSON.parse(b.cart_items) : b.cart_items;
-              if (Array.isArray(rawCart) && rawCart.length > 0) {
-                const itemImg = rawCart[0]?.imageSrc || rawCart[0]?.images || (Array.isArray(rawCart[0]?.images) ? rawCart[0].images[0] : null);
-                if (itemImg && typeof itemImg === 'string') {
-                  realImage = itemImg;
-                }
+            if (rawCartArr.length > 0) {
+              const itemImg =
+                rawCartArr[0]?.imageSrc ||
+                rawCartArr[0]?.images ||
+                (Array.isArray(rawCartArr[0]?.images) ? rawCartArr[0].images[0] : null);
+              if (itemImg && typeof itemImg === 'string') {
+                realImage = itemImg;
               }
-            } catch {}
+            }
 
             return {
               id: b.id,
@@ -187,9 +238,12 @@ export default function OrdersPage() {
                   ? 'Delivered on'
                   : st === 'cancelled'
                   ? 'Status'
+                  : estDays === 0
+                  ? 'Delivery Type'
                   : 'Est. Delivery',
               imageSrc: realImage,
               progressPercent: pct,
+              remainingBalance,
             };
           });
           setOrders(mapped);
@@ -221,9 +275,10 @@ export default function OrdersPage() {
     }
     setCancellingId(order.id);
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch('/api/bookings', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           id: order.id,
           action: 'cancel',
@@ -560,9 +615,19 @@ export default function OrdersPage() {
 
                   {/* Plan Badge & Description */}
                   <div className="pt-0.5">
-                    <span className="inline-block px-2 py-0.5 rounded-full bg-purple-900/50 border border-purple-400/30 text-[10px] font-bold text-purple-200 mb-1">
-                      {order.planName}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-purple-900/50 border border-purple-400/30 text-[10px] font-bold text-purple-200">
+                        {order.planName}
+                      </span>
+                      {Number(order.remainingBalance || 0) > 0 && (
+                        <Link
+                          href={`/orders/${order.id}`}
+                          className="inline-block px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-[10px] font-bold text-amber-300 hover:bg-amber-500/25"
+                        >
+                          Balance Due: ₹{Number(order.remainingBalance).toLocaleString('en-IN')}
+                        </Link>
+                      )}
+                    </div>
                     <p className="text-[11px] text-purple-200/70 leading-relaxed line-clamp-2">
                       {order.description}
                     </p>
@@ -624,24 +689,23 @@ export default function OrdersPage() {
                     </div>
 
                     {/* Primary Action Button */}
-                    <div>
-                      {isCompleted ? (
+                    <div className="flex items-center gap-1.5">
+                      {isCompleted && (
                         <Link
                           href="/reviews"
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] font-bold shadow-md shadow-emerald-950/50 hover:opacity-95 active:scale-95 transition-all"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] font-bold shadow-md shadow-emerald-950/50 hover:opacity-95 active:scale-95 transition-all"
                         >
                           <Star className="w-3 h-3" />
-                          <span>Rate Service</span>
-                        </Link>
-                      ) : (
-                        <Link
-                          href={`/orders/${order.id}`}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-[11px] font-bold shadow-md shadow-purple-900/50 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
-                        >
-                          <Activity className="w-3 h-3" />
-                          <span>Track Status</span>
+                          <span>Rate</span>
                         </Link>
                       )}
+                      <Link
+                        href={`/orders/${order.id}`}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-[11px] font-bold shadow-md shadow-purple-900/50 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+                      >
+                        <Activity className="w-3 h-3" />
+                        <span>{Number(order.remainingBalance || 0) > 0 ? 'Pay / Track' : 'Track Status'}</span>
+                      </Link>
                     </div>
                   </div>
                 </div>

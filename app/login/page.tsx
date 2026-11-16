@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -16,7 +16,7 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, trackUserLoginAndPwaMap } from '@/lib/supabaseClient';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -44,6 +44,21 @@ function LoginPageContent() {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
+  useEffect(() => {
+    let active = true;
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active || !data?.session?.user) return;
+        trackUserLoginAndPwaMap(data.session.user.id, data.session.user.email);
+        router.replace(safeNext);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [router, safeNext]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -55,6 +70,10 @@ function LoginPageContent() {
 
     setIsSubmitting(true);
     try {
+      try {
+        localStorage.setItem('rememberMe', String(rememberMe));
+      } catch {}
+
       if (mode === 'signup') {
         const res = await fetch('/api/auth/signup', {
           method: 'POST',
@@ -68,10 +87,11 @@ function LoginPageContent() {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Signup failed');
 
-        await supabase.auth.signInWithPassword({
+        const { data: signInData } = await supabase.auth.signInWithPassword({
           email: emailOrPhone,
           password,
         });
+        trackUserLoginAndPwaMap(signInData?.user?.id || json?.user?.id, emailOrPhone);
 
         showToast(
           isCheckoutRedirect
@@ -81,11 +101,12 @@ function LoginPageContent() {
         );
         setTimeout(() => router.replace(safeNext), 800);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({
           email: emailOrPhone,
           password,
         });
         if (error) throw error;
+        trackUserLoginAndPwaMap(signInData?.user?.id, signInData?.user?.email || emailOrPhone);
         showToast(
           isCheckoutRedirect
             ? 'Signed in! Returning to checkout...'
@@ -142,6 +163,7 @@ function LoginPageContent() {
       {/* Top Header Back Navigation */}
       <div className="max-w-md w-full mx-auto flex items-center justify-between">
         <button
+          type="button"
           onClick={() => router.back()}
           aria-label="Go Back"
           className="w-10 h-10 rounded-full bg-[#121429] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/40 hover:bg-[#1a1d3d] transition-all shadow-sm cursor-pointer"

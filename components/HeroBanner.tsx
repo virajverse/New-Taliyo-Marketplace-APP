@@ -30,8 +30,49 @@ const BRAND_INTRO_SLIDE: BannerSlide = {
   imageSrc: '/assets/hero_laptop_clean.png',
 };
 
-export default function HeroBanner() {
-  const [slides, setSlides] = useState<BannerSlide[]>([BRAND_INTRO_SLIDE]);
+export interface ApiBannerInput {
+  id?: string;
+  alt_text?: string | null;
+  aria_label?: string | null;
+  cta_text?: string | null;
+  cta_url?: string | null;
+  image_url?: string | null;
+}
+
+function mapApiBanners(data: ApiBannerInput[]): BannerSlide[] {
+  if (!data || data.length === 0) return [BRAND_INTRO_SLIDE];
+  return data.map((b, idx: number) => {
+    const customTitle = b.alt_text || 'Taliyo Technologies Marketplace';
+    const parts = customTitle.includes('—')
+      ? customTitle.split('—')
+      : customTitle.includes('-')
+      ? customTitle.split('-')
+      : [customTitle, ''];
+    const title = parts[0]?.trim() || 'Taliyo Technologies';
+    const highlight = parts[1]?.trim() || (parts[0] ? '' : 'Marketplace');
+
+    return {
+      id: b.id || `b-${idx}`,
+      badge: b.aria_label || 'FEATURED BANNER',
+      title,
+      highlightText: highlight,
+      subtitle: 'Verified software services & packages',
+      ctaText: b.cta_text || 'Explore',
+      ctaHref: b.cta_url || '/categories',
+      imageUrl: b.image_url || undefined,
+      isRealLogoBanner: true,
+    };
+  });
+}
+
+export default function HeroBanner({
+  initialBanners,
+}: {
+  initialBanners?: ApiBannerInput[];
+}) {
+  const [slides, setSlides] = useState<BannerSlide[]>(() =>
+    initialBanners && initialBanners.length > 0 ? mapApiBanners(initialBanners) : [BRAND_INTRO_SLIDE],
+  );
   const [currentSlide, setCurrentSlide] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartXRef = useRef<number | null>(null);
@@ -56,50 +97,47 @@ export default function HeroBanner() {
 
   // Fetch active banners configured in Supabase / Admin Panel with versioned SWR caching
   useEffect(() => {
-    interface ApiBanner {
-      id?: string;
-      alt_text?: string;
-      aria_label?: string;
-      cta_text?: string;
-      cta_url?: string;
-      image_url?: string;
-    }
-
-    return subscribeSmartFetch<{ data?: ApiBanner[] }>(
+    return subscribeSmartFetch<{ data?: ApiBannerInput[] }>(
       '/api/banners',
       'banners',
       (json) => {
         const data = json?.data;
         if (data && data.length > 0) {
-          const mapped: BannerSlide[] = data.map((b, idx: number) => {
-            const customTitle = b.alt_text || 'Taliyo Technologies Marketplace';
-            const parts = customTitle.includes('—')
-              ? customTitle.split('—')
-              : customTitle.includes('-')
-              ? customTitle.split('-')
-              : [customTitle, ''];
-            const title = parts[0]?.trim() || 'Taliyo Technologies';
-            const highlight = parts[1]?.trim() || (parts[0] ? '' : 'Marketplace');
-
-            return {
-              id: b.id || `b-${idx}`,
-              badge: b.aria_label || 'FEATURED BANNER',
-              title,
-              highlightText: highlight,
-              subtitle: 'Verified software services & packages',
-              ctaText: b.cta_text || 'Explore',
-              ctaHref: b.cta_url || '/categories',
-              imageUrl: b.image_url,
-              isRealLogoBanner: true,
-            };
-          });
-          setSlides(mapped);
+          setSlides(mapApiBanners(data));
         } else {
           setSlides([BRAND_INTRO_SLIDE]);
         }
       },
     );
   }, []);
+
+  const slidesRef = useRef<BannerSlide[]>([]);
+  slidesRef.current = slides;
+  const trackedImpressionsRef = useRef<Set<string>>(new Set());
+
+  const trackBannerEvent = (bannerId: string, type: 'impression' | 'click') => {
+    if (!bannerId || bannerId === 'taliyo-intro' || bannerId.startsWith('b-')) return;
+    try {
+      const payload = JSON.stringify({ id: bannerId, type });
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        navigator.sendBeacon('/api/banners/track', new Blob([payload], { type: 'application/json' }));
+      } else {
+        fetch('/api/banners/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    const active = slides[currentSlide];
+    if (!active?.id || trackedImpressionsRef.current.has(active.id)) return;
+    trackedImpressionsRef.current.add(active.id);
+    trackBannerEvent(active.id, 'impression');
+  }, [currentSlide, slides]);
 
   // Auto-slide only when multiple admin banners exist
   useEffect(() => {
@@ -162,6 +200,7 @@ export default function HeroBanner() {
                 <div className="pt-1">
                   <Link
                     href={slide.ctaHref}
+                    onClick={() => trackBannerEvent(slide.id, 'click')}
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white text-[11px] font-extrabold shadow-md shadow-purple-950/50 transition-all active:scale-95"
                   >
                     <span>{slide.ctaText}</span>

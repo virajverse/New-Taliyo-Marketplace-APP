@@ -5,11 +5,30 @@ import {
   loadVerifiedUtrPool,
   normalizeUtr,
 } from '@/lib/paymentServer';
+import { enforceRateLimit } from '@/lib/rateLimit';
+import { resolveAuthUserFromRequest } from '@/lib/authServer';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  const limited = await enforceRateLimit(req, 'paymentOrder');
+  if (limited) return limited;
+
   try {
+    const auth = await resolveAuthUserFromRequest(req);
+    if (!auth.user) {
+      return NextResponse.json(
+        {
+          valid: false,
+          duplicate: false,
+          poolMatched: false,
+          status: 'unauthorized',
+          message: auth.error || 'Please sign in to verify payment reference.',
+        },
+        { status: auth.status || 401 },
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const method = String(body.method || 'upi').toLowerCase();
     const expectedAmount = Number(body.amount || 0);

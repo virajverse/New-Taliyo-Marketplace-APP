@@ -138,13 +138,14 @@ export function extractUtrFromPayload(body: Record<string, unknown>): string {
 }
 
 export async function findExistingBookingWithUtr(cleanUtr: string) {
-  if (!cleanUtr || cleanUtr.length < 8) return null;
+  const safeUtr = String(cleanUtr || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+  if (!safeUtr || safeUtr.length < 8) return null;
 
   const { data } = await supabaseAdmin
     .from('bookings')
     .select('id, status, requirements, additional_notes, final_price')
     .neq('status', 'cancelled')
-    .or(`requirements.ilike.%${cleanUtr}%,additional_notes.ilike.%${cleanUtr}%`)
+    .or(`requirements.ilike.%${safeUtr}%,additional_notes.ilike.%${safeUtr}%`)
     .order('created_at', { ascending: false })
     .limit(5);
 

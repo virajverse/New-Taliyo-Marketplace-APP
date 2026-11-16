@@ -104,6 +104,7 @@ export default function VerifyEmailPage() {
       {/* Top Header */}
       <div className="max-w-md w-full mx-auto flex items-center justify-between">
         <button
+          type="button"
           onClick={() => router.back()}
           aria-label="Go Back"
           className="w-10 h-10 rounded-full bg-[#121429] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/40 hover:bg-[#1a1d3d] transition-all shadow-sm cursor-pointer"
@@ -171,6 +172,7 @@ export default function VerifyEmailPage() {
 
           {/* Open Email Button */}
           <button
+            type="button"
             onClick={handleOpenEmail}
             className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-500 text-white text-xs font-bold shadow-lg shadow-fuchsia-600/30 hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
@@ -188,6 +190,7 @@ export default function VerifyEmailPage() {
             </p>
 
             <button
+              type="button"
               onClick={handleResend}
               disabled={countdown > 0 || isResending}
               className={`mt-1 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${

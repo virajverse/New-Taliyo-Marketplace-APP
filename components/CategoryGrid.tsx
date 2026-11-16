@@ -32,42 +32,56 @@ const ALL_SYSTEMS_TILE: CategoryItem = {
   isActive: false,
 };
 
-export default function CategoryGrid() {
-  const [categories, setCategories] = useState<CategoryItem[]>([ALL_SYSTEMS_TILE]);
+export interface CategoryGridInput {
+  id: string;
+  name: string;
+  slug?: string | null;
+}
+
+function mapCategories(data: CategoryGridInput[]): CategoryItem[] {
+  const iconList = [
+    <Terminal key="1" className="w-5 h-5 text-fuchsia-400" />,
+    <Cog key="2" className="w-5 h-5 text-cyan-400" />,
+    <Eye key="3" className="w-5 h-5 text-amber-400" />,
+    <Globe key="4" className="w-5 h-5 text-emerald-400" />,
+    <Code2 key="5" className="w-5 h-5 text-purple-300" />,
+    <Smartphone key="6" className="w-5 h-5 text-purple-300" />,
+    <Cpu key="7" className="w-5 h-5 text-fuchsia-300" />,
+  ];
+  const top = (Array.isArray(data) ? data : []).slice(0, 7);
+  if (top.length === 0) return [ALL_SYSTEMS_TILE];
+  return [
+    ALL_SYSTEMS_TILE,
+    ...top.map((cat, idx) => ({
+      id: cat.id,
+      name: cat.name.replace(' Systems', '').replace(' ', '\n'),
+      slug: cat.slug || cat.id,
+      icon: iconList[idx % iconList.length],
+      href: `/categories/${cat.slug || cat.id}`,
+    })),
+  ];
+}
+
+export default function CategoryGrid({
+  initialCategories,
+}: {
+  initialCategories?: CategoryGridInput[];
+}) {
+  const [categories, setCategories] = useState<CategoryItem[]>(() =>
+    initialCategories && initialCategories.length > 0
+      ? mapCategories(initialCategories)
+      : [ALL_SYSTEMS_TILE],
+  );
 
   useEffect(() => {
-    const iconList = [
-      <Terminal key="1" className="w-5 h-5 text-fuchsia-400" />,
-      <Cog key="2" className="w-5 h-5 text-cyan-400" />,
-      <Eye key="3" className="w-5 h-5 text-amber-400" />,
-      <Globe key="4" className="w-5 h-5 text-emerald-400" />,
-      <Code2 key="5" className="w-5 h-5 text-purple-300" />,
-      <Smartphone key="6" className="w-5 h-5 text-purple-300" />,
-      <Cpu key="7" className="w-5 h-5 text-fuchsia-300" />,
-    ];
-
     return subscribeSmartFetch<{
-      data?: Array<{ id: string; name: string; slug?: string | null }>;
+      data?: CategoryGridInput[];
     }>(
       '/api/catalog?mode=categories',
       'catalog',
       (json) => {
-        const data = (Array.isArray(json?.data) ? json.data : []).slice(0, 7);
-        if (data.length > 0) {
-          const mapped: CategoryItem[] = [
-            ALL_SYSTEMS_TILE,
-            ...data.map((cat, idx) => ({
-              id: cat.id,
-              name: cat.name.replace(' Systems', '').replace(' ', '\n'),
-              slug: cat.slug || cat.id,
-              icon: iconList[idx % iconList.length],
-              href: `/categories/${cat.slug || cat.id}`,
-            })),
-          ];
-          setCategories(mapped);
-        } else {
-          setCategories([ALL_SYSTEMS_TILE]);
-        }
+        const data = json?.data || [];
+        setCategories(mapCategories(data));
       },
       { onError: () => setCategories([ALL_SYSTEMS_TILE]) },
     );

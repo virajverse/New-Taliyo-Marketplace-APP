@@ -580,12 +580,15 @@ do $$ begin
   end if;
 end $$;
 
--- Site settings: enable RLS and allow public read
+-- Site settings: enable RLS and allow public read ONLY for non-sensitive public keys
 alter table site_settings enable row level security;
 do $$ begin
-  if not exists (select 1 from pg_policies where tablename='site_settings' and policyname='site_settings_select_public') then
-    create policy site_settings_select_public on site_settings for select using (true);
+  if exists (select 1 from pg_policies where tablename='site_settings' and policyname='site_settings_select_public') then
+    drop policy site_settings_select_public on site_settings;
   end if;
+  create policy site_settings_select_public on site_settings
+    for select
+    using (key not in ('payment_gateway_config', 'verified_utr_pool', 'platform_coupons'));
 end $$;
 
 -- PWA tracking tables (idempotent)

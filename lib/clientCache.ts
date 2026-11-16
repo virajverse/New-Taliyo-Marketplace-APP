@@ -192,23 +192,31 @@ export async function syncCacheVersions(force = false): Promise<ScopeVersions> {
   return inFlightVersionSync;
 }
 
-async function fetchJsonSingleFlight<T>(url: string): Promise<T> {
-  const existing = inFlightFetches.get(url);
+async function fetchJsonSingleFlight<T>(
+  url: string,
+  headers?: Record<string, string>,
+): Promise<T> {
+  const authSuffix = headers?.Authorization ? `:auth:${headers.Authorization.slice(-12)}` : '';
+  const flightKey = `${url}${authSuffix}`;
+  const existing = inFlightFetches.get(flightKey);
   if (existing) return existing as Promise<T>;
 
   const promise = (async () => {
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: headers && Object.keys(headers).length ? headers : undefined,
+    });
     if (!res.ok) {
       throw new Error(`Request failed (${res.status}) for ${url}`);
     }
     return (await res.json()) as T;
   })();
 
-  inFlightFetches.set(url, promise);
+  inFlightFetches.set(flightKey, promise);
   try {
     return await promise;
   } finally {
-    inFlightFetches.delete(url);
+    inFlightFetches.delete(flightKey);
   }
 }
 
@@ -222,7 +230,11 @@ export function subscribeSmartFetch<T>(
   url: string,
   scope: ClientCacheScope,
   onData: (data: T, meta: { fromCache: boolean }) => void,
-  opts?: { maxAgeMs?: number; onError?: (err: unknown) => void },
+  opts?: {
+    maxAgeMs?: number;
+    onError?: (err: unknown) => void;
+    getHeaders?: () => Promise<Record<string, string>>;
+  },
 ): () => void {
   attachGlobalVersionLifecycle();
 
@@ -250,7 +262,10 @@ export function subscribeSmartFetch<T>(
 
       if (isFreshEnough) return;
 
-      const fresh = await fetchJsonSingleFlight<T>(url);
+      const extraHeaders = opts?.getHeaders ? await opts.getHeaders() : undefined;
+      if (unmounted) return;
+
+      const fresh = await fetchJsonSingleFlight<T>(url, extraHeaders);
       if (unmounted) return;
 
       const postVersions = loadStoredVersions();

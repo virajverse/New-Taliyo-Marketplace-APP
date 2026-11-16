@@ -27,7 +27,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, getAuthHeaders } from '@/lib/supabaseClient';
 import { subscribeSmartFetch } from '@/lib/clientCache';
 
 interface HelpCategory {
@@ -166,6 +166,7 @@ export default function SupportPage() {
   const [isSending, setIsSending] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [supportWhatsApp, setSupportWhatsApp] = useState('917042523611');
   const [supportPhone, setSupportPhone] = useState('+917042523611');
@@ -273,12 +274,17 @@ export default function SupportPage() {
     setIsSending(true);
 
     try {
+      const authHeaders = await getAuthHeaders();
+      const deviceId =
+        typeof window !== 'undefined' ? localStorage.getItem('pwa_device_id') || 'web-support' : 'web-support';
       const res = await fetch('/api/support', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           message: query,
           topic: currentChipObj.label,
+          conversationId,
+          deviceId,
           userId,
           email: userEmail,
         }),
@@ -287,6 +293,9 @@ export default function SupportPage() {
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Support busy');
+      }
+      if (data.conversationId) {
+        setConversationId(String(data.conversationId));
       }
 
       const botMsg: SupportMessage = {

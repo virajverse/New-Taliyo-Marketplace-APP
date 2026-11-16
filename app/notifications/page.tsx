@@ -16,7 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, getAuthHeaders } from '@/lib/supabaseClient';
 import { invalidateClientCache, subscribeSmartFetch } from '@/lib/clientCache';
 
 const DISMISSED_NOTIF_KEY = 'taliyo_dismissed_notifications';
@@ -138,6 +138,7 @@ export default function NotificationsPage() {
           setIsLoading(false);
         },
         {
+          getHeaders: uid ? getAuthHeaders : undefined,
           onError: (err) => {
             console.error('Failed to fetch notifications:', err);
             setIsLoading(false);
@@ -162,9 +163,10 @@ export default function NotificationsPage() {
     try {
       setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
       showToast('All notifications marked as read');
+      const authHeaders = await getAuthHeaders();
       await fetch('/api/notifications', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ mark_all: true, userId: currentUserId }),
       });
       invalidateClientCache('notifications');
@@ -190,9 +192,10 @@ export default function NotificationsPage() {
         prev.map((n) => (n.id === notif.id ? { ...n, isUnread: false } : n))
       );
       try {
+        const authHeaders = await getAuthHeaders();
         await fetch('/api/notifications', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({ id: notif.id }),
         });
         invalidateClientCache('notifications');

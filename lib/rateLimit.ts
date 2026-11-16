@@ -57,9 +57,11 @@ function getLimiter(name: LimiterName): Ratelimit | null {
 }
 
 export function extractClientIp(req: Request): string {
-  const fwd = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+  const vercelIp = (req.headers.get('x-vercel-forwarded-for') || '').split(',')[0].trim();
+  const cfIp = (req.headers.get('cf-connecting-ip') || '').trim();
   const realIp = (req.headers.get('x-real-ip') || '').trim();
-  return fwd || realIp || 'anonymous';
+  const fwd = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+  return vercelIp || cfIp || realIp || fwd || 'anonymous';
 }
 
 function checkLocalFallback(name: LimiterName, key: string): {

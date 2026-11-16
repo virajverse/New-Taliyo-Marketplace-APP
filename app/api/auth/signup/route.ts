@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { isDisposableEmail } from '@/lib/disposableEmail';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,17 @@ export async function POST(req: NextRequest) {
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
+    }
+
+    if (typeof email !== 'string' || !email.includes('@')) {
+      return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
+    }
+
+    if (await isDisposableEmail(email)) {
+      return NextResponse.json(
+        { error: 'Disposable or temporary email addresses are not allowed.' },
+        { status: 400 },
+      );
     }
 
     if (typeof password !== 'string' || password.length < 6) {

@@ -144,7 +144,7 @@ export async function GET(req: NextRequest) {
             .order('sort_order', { ascending: true }),
           supabaseAdmin
             .from('reviews')
-            .select('*')
+            .select('id, service_id, customer_name, rating, review_text, is_approved, is_featured, created_at')
             .eq('is_approved', true)
             .order('created_at', { ascending: false })
             .limit(4),

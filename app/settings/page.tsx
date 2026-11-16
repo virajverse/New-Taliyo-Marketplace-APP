@@ -219,6 +219,7 @@ export default function SettingsPage() {
       <header className="sticky top-0 z-40 bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => router.back()}
             aria-label="Go Back"
             className="w-10 h-10 rounded-full bg-[#121429] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/40 hover:bg-[#1a1d3d] transition-all shadow-sm cursor-pointer"
@@ -318,6 +319,7 @@ export default function SettingsPage() {
 
             {currentUserEmail ? (
               <button
+                type="button"
                 onClick={() => setIsSecurityModalOpen(true)}
                 className="w-full flex items-center justify-between p-3.5 hover:bg-[#161833] transition-colors group cursor-pointer text-left"
               >
@@ -383,6 +385,7 @@ export default function SettingsPage() {
             </div>
 
             <button
+              type="button"
               onClick={handleClearCache}
               className="w-full flex items-center justify-between p-3.5 hover:bg-[#161833] transition-colors group cursor-pointer text-left"
             >
@@ -455,6 +458,7 @@ export default function SettingsPage() {
 
             {currentUserEmail && (
               <button
+                type="button"
                 onClick={() => setIsLogoutOpen(true)}
                 className="w-full flex items-center justify-between p-3.5 hover:bg-rose-500/[0.08] transition-colors group cursor-pointer text-left"
               >
@@ -561,6 +565,7 @@ export default function SettingsPage() {
                 <h3 className="text-lg font-bold text-white">Change Password</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setIsSecurityModalOpen(false)}
                 className="w-8 h-8 rounded-full bg-[#181a33] flex items-center justify-center text-gray-400 hover:text-white cursor-pointer"
               >

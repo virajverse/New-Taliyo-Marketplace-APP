@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Bell, ShoppingBag, Download, Heart, UserCheck, LogIn } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, getAuthHeaders } from '@/lib/supabaseClient';
 import { usePwaInstall } from '@/components/PwaInstallProvider';
 import { subscribeSmartFetch } from '@/lib/clientCache';
 import { fetchSavedWishlistServiceIds } from '@/lib/wishlistClient';
@@ -74,7 +74,10 @@ export default function Header() {
           const list = Array.isArray(json?.data) ? json.data : [];
           setUnreadNotificationsCount(list.filter((n) => n.is_read === false).length);
         },
-        { onError: () => setUnreadNotificationsCount(0) },
+        {
+          onError: () => setUnreadNotificationsCount(0),
+          getHeaders: uid ? getAuthHeaders : undefined,
+        },
       );
     };
 

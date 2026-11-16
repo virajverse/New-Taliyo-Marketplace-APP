@@ -25,6 +25,7 @@ interface CartItem {
   packageName: string;
   deliveryDays: number;
   price: number;
+  usdPrice?: number;
   quantity: number;
   imageSrc: string;
 }
@@ -35,11 +36,16 @@ export default function CartPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showFeeInfo, setShowFeeInfo] = useState(false);
+  const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
 
   // Load real items from persistent client storage
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
+        const savedCurr = localStorage.getItem('taliyo_currency');
+        if (savedCurr === 'USD' || savedCurr === 'INR') {
+          setCurrency(savedCurr);
+        }
         const stored = localStorage.getItem('taliyo_cart');
         if (stored) {
           const parsed = JSON.parse(stored);
@@ -54,6 +60,25 @@ export default function CartPage() {
       setIsLoading(false);
     }
   }, []);
+
+  const handleCurrencyChange = (next: 'INR' | 'USD') => {
+    setCurrency(next);
+    try {
+      localStorage.setItem('taliyo_currency', next);
+    } catch {}
+  };
+
+  const getUsdUnit = (item: CartItem) =>
+    item.usdPrice && item.usdPrice > 0
+      ? item.usdPrice
+      : item.price > 0
+        ? Math.max(19, Math.round(item.price / 83))
+        : 0;
+
+  const formatMoney = (inrAmt: number, usdAmt: number) =>
+    currency === 'USD'
+      ? `$${usdAmt.toLocaleString('en-US')} USD`
+      : `₹${inrAmt.toLocaleString('en-IN')}`;
 
   const updateCartStorage = (newItems: CartItem[]) => {
     setCartItems(newItems);
@@ -94,6 +119,7 @@ export default function CartPage() {
   // Dynamic calculations
   const totalItemsCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const usdSubtotal = cartItems.reduce((acc, item) => acc + getUsdUnit(item) * item.quantity, 0);
   const totalAmount = subtotal; // Platform fee is free (waived)
 
   const handleProceedToOrder = () => {
@@ -124,19 +150,45 @@ export default function CartPage() {
             </div>
           </div>
 
-          {/* Right Action: Clear Cart */}
-          {cartItems.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowClearConfirm(true)}
-              aria-label="Clear All Items"
-              title="Clear Cart"
-              className="px-3 py-1.5 rounded-full bg-[#121326] border border-purple-500/20 flex items-center gap-1.5 text-xs font-bold text-gray-300 hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-950/20 transition-all cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear</span>
-            </button>
-          )}
+          {/* Right Actions: Currency + Clear Cart */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-full bg-[#121326] border border-purple-500/20 p-0.5 text-[10px] font-bold">
+              <button
+                type="button"
+                onClick={() => handleCurrencyChange('INR')}
+                className={`px-2 py-1 rounded-full transition-all cursor-pointer ${
+                  currency === 'INR'
+                    ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                ₹ INR
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCurrencyChange('USD')}
+                className={`px-2 py-1 rounded-full transition-all cursor-pointer ${
+                  currency === 'USD'
+                    ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                $ USD
+              </button>
+            </div>
+            {cartItems.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(true)}
+                aria-label="Clear All Items"
+                title="Clear Cart"
+                className="px-3 py-1.5 rounded-full bg-[#121326] border border-purple-500/20 flex items-center gap-1.5 text-xs font-bold text-gray-300 hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-950/20 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear</span>
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Clear Cart Confirmation Modal */}
@@ -248,30 +300,61 @@ export default function CartPage() {
                         {/* Price */}
                         <div className="text-right flex-shrink-0">
                           <span className="text-sm font-black text-white">
-                            ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                            {formatMoney(item.price * item.quantity, getUsdUnit(item) * item.quantity)}
                           </span>
+                          {currency === 'USD' && item.price > 0 && (
+                            <span className="text-[10px] text-gray-400 block">
+                              ₹{(item.price * item.quantity).toLocaleString('en-IN')} INR
+                            </span>
+                          )}
                         </div>
                       </div>
 
                       {/* Middle Metadata: Package & Delivery */}
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className="inline-block px-2 py-0.5 rounded-full bg-purple-900/40 border border-purple-400/25 text-[10px] font-semibold text-purple-200">
                           Package: {item.packageName}
                         </span>
                         <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
                           <Clock className="w-3 h-3 text-fuchsia-400" />
-                          <span>Delivery: {item.deliveryDays} Days</span>
+                          <span>
+                            {item.deliveryDays === 0 ? 'Instant Digital Delivery' : `Delivery: ${item.deliveryDays} Days`}
+                          </span>
                         </span>
                       </div>
 
-                      {/* Bottom Row: Change Plan & Remove Button */}
-                      <div className="mt-2.5 flex items-center justify-between gap-3 pt-1.5 border-t border-purple-500/10">
-                        <Link
-                          href={`/services/${item.slug}`}
-                          className="text-[11px] font-bold text-purple-300 hover:text-fuchsia-300 transition-colors"
-                        >
-                          Change Plan →
-                        </Link>
+                      {/* Bottom Row: Quantity Stepper, Change Plan & Remove Button */}
+                      <div className="mt-2.5 flex items-center justify-between gap-2 pt-1.5 border-t border-purple-500/10 flex-wrap">
+                        <div className="flex items-center gap-2.5">
+                          <div className="inline-flex items-center gap-1 rounded-full bg-[#121326] border border-purple-500/25 p-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuantity(item.id, -1)}
+                              aria-label={`Decrease ${item.title} quantity`}
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:bg-purple-600/30 hover:text-white transition-colors cursor-pointer"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="px-1.5 text-[11px] font-extrabold text-white min-w-[18px] text-center">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuantity(item.id, 1)}
+                              aria-label={`Increase ${item.title} quantity`}
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:bg-purple-600/30 hover:text-white transition-colors cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          <Link
+                            href={`/services/${item.slug}`}
+                            className="text-[11px] font-bold text-purple-300 hover:text-fuchsia-300 transition-colors"
+                          >
+                            Change Plan →
+                          </Link>
+                        </div>
 
                         {/* Trash Delete Button */}
                         <button
@@ -300,7 +383,7 @@ export default function CartPage() {
                   <div className="flex items-center justify-between text-gray-300">
                     <span>Subtotal ({totalItemsCount} {totalItemsCount === 1 ? 'Item' : 'Items'})</span>
                     <span className="font-bold text-white">
-                      ₹{subtotal.toLocaleString('en-IN')}
+                      {formatMoney(subtotal, usdSubtotal)}
                     </span>
                   </div>
 
@@ -330,10 +413,14 @@ export default function CartPage() {
                   <div className="border-t border-purple-500/15 pt-2 flex items-center justify-between">
                     <div>
                       <span className="text-xs font-bold text-white block">Total Amount</span>
-                      <span className="text-[10px] text-gray-400 block mt-0.5">All taxes & deployment included</span>
+                      <span className="text-[10px] text-gray-400 block mt-0.5">
+                        {currency === 'USD'
+                          ? `Approx. ₹${totalAmount.toLocaleString('en-IN')} INR settlement`
+                          : 'All taxes & deployment included'}
+                      </span>
                     </div>
                     <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-purple-100 to-fuchsia-300">
-                      ₹{totalAmount.toLocaleString('en-IN')}
+                      {formatMoney(totalAmount, usdSubtotal)}
                     </span>
                   </div>
                 </div>

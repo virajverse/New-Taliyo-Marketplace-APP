@@ -307,6 +307,7 @@ export default function WishlistPage() {
             <span className="leading-tight">{toastMsg.text}</span>
             {toastMsg.action && (
               <button
+                type="button"
                 onClick={toastMsg.action}
                 className="text-[11px] font-bold text-fuchsia-400 hover:text-fuchsia-300 underline underline-offset-2 ml-1 cursor-pointer"
               >
@@ -321,6 +322,7 @@ export default function WishlistPage() {
       <header className="sticky top-0 z-40 bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => router.back()}
             aria-label="Go Back"
             className="w-10 h-10 rounded-full bg-[#121429] border border-purple-500/20 flex items-center justify-center text-gray-300 hover:text-white hover:border-purple-500/40 hover:bg-[#1a1d3d] transition-all shadow-sm cursor-pointer"
@@ -339,6 +341,7 @@ export default function WishlistPage() {
 
         {items.length > 0 && (
           <button
+            type="button"
             onClick={() => setIsClearModalOpen(true)}
             aria-label="Clear all wishlist items"
             className="w-10 h-10 rounded-full bg-[#121429] border border-purple-500/20 flex items-center justify-center text-gray-400 hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10 transition-all shadow-sm cursor-pointer"
@@ -394,6 +397,7 @@ export default function WishlistPage() {
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white"
               >
@@ -431,6 +435,7 @@ export default function WishlistPage() {
                   <div className="absolute right-0 top-full mt-1.5 w-48 rounded-2xl bg-[#0f1124] border border-purple-500/30 p-1.5 shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150">
                     {(['recent', 'price-asc', 'price-desc', 'rating-desc'] as SortOption[]).map((opt) => (
                       <button
+                        type="button"
                         key={opt}
                         onClick={() => {
                           setSortBy(opt);
@@ -517,6 +522,7 @@ export default function WishlistPage() {
 
                       {/* Wishlist Heart Toggle Button */}
                       <button
+                        type="button"
                         onClick={() => handleRemove(item.id)}
                         aria-label="Remove from wishlist"
                         className="w-8 h-8 rounded-full bg-[#181a33] border border-purple-500/20 flex items-center justify-center text-fuchsia-400 hover:scale-110 active:scale-90 transition-all shrink-0 hover:bg-rose-500/10 hover:border-rose-500/30 hover:text-rose-400 shadow-sm cursor-pointer"
@@ -555,6 +561,7 @@ export default function WishlistPage() {
                       <div className="flex items-center gap-2">
                         {/* Add to Cart Button */}
                         <button
+                          type="button"
                           onClick={() => handleAddToCart(item)}
                           className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#181a33] border border-purple-500/25 text-purple-200 text-xs font-semibold hover:bg-[#202347] hover:border-purple-500/45 transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                         >
@@ -595,6 +602,7 @@ export default function WishlistPage() {
 
             {searchQuery ? (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
                 className="px-4 py-2 rounded-xl bg-[#181a33] border border-purple-500/30 text-purple-300 text-xs font-semibold hover:bg-[#202242] transition-colors cursor-pointer"
               >

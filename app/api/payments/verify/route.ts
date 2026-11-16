@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { enforceRateLimit } from '@/lib/rateLimit';
+import { resolveAuthUserFromRequest } from '@/lib/authServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +12,18 @@ interface VerifyBody {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = await enforceRateLimit(req, 'paymentOrder');
+  if (limited) return limited;
+
   try {
+    const auth = await resolveAuthUserFromRequest(req);
+    if (!auth.user) {
+      return NextResponse.json(
+        { verified: false, error: auth.error || 'Authentication required' },
+        { status: auth.status || 401 },
+      );
+    }
+
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
     if (!keySecret) {
       return NextResponse.json(

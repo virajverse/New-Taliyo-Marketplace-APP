@@ -36,6 +36,44 @@ export function usePwaInstall() {
   return useContext(PwaInstallContext);
 }
 
+function getOrCreatePwaDeviceId(): string {
+  try {
+    let id = localStorage.getItem('pwa_device_id');
+    if (!id) {
+      id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `pwa-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem('pwa_device_id', id);
+    }
+    return id;
+  } catch {
+    return `pwa-${Date.now()}`;
+  }
+}
+
+function sendPwaCollectEvent(payload: { event?: string; type?: string }) {
+  try {
+    const device_id = getOrCreatePwaDeviceId();
+    const body = JSON.stringify({
+      device_id,
+      ...payload,
+      lang: typeof navigator !== 'undefined' ? navigator.language : null,
+      platform: typeof navigator !== 'undefined' ? navigator.platform : null,
+      ref: typeof document !== 'undefined' ? document.referrer || null : null,
+    });
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      navigator.sendBeacon('/api/pwa-installs/collect', new Blob([body], { type: 'application/json' }));
+    } else {
+      fetch('/api/pwa-installs/collect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true,
+      }).catch(() => {});
+    }
+  } catch {}
+}
+
 export default function PwaInstallProvider({ children }: { children: React.ReactNode }) {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -50,6 +88,10 @@ export default function PwaInstallProvider({ children }: { children: React.React
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
     setIsInstalled(standalone);
+    getOrCreatePwaDeviceId();
+    if (standalone) {
+      sendPwaCollectEvent({ type: 'standalone_visit' });
+    }
 
     const ua = window.navigator.userAgent || '';
     const iosDevice = /iPhone|iPad|iPod/i.test(ua);
@@ -100,6 +142,7 @@ export default function PwaInstallProvider({ children }: { children: React.React
       const bip = e as BeforeInstallPromptEvent;
       pwaWin.__bip = bip;
       setDeferredPrompt(bip);
+      sendPwaCollectEvent({ type: 'prompt_available' });
     };
 
     const onBipReady = () => {
@@ -113,6 +156,7 @@ export default function PwaInstallProvider({ children }: { children: React.React
       setDeferredPrompt(null);
       pwaWin.__bip = null;
       setGuideOpen(false);
+      sendPwaCollectEvent({ event: 'installed', type: 'appinstalled' });
     };
 
     const mm = window.matchMedia('(display-mode: standalone)');
@@ -193,6 +237,7 @@ export default function PwaInstallProvider({ children }: { children: React.React
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setGuideOpen(false)}
                 aria-label="Close"
                 className="p-1.5 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
@@ -213,6 +258,7 @@ export default function PwaInstallProvider({ children }: { children: React.React
             </ol>
 
             <button
+              type="button"
               onClick={() => setGuideOpen(false)}
               className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-xs font-bold text-white hover:opacity-95 transition-opacity"
             >

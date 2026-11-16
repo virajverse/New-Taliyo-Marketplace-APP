@@ -23,7 +23,7 @@ import {
   ShoppingBag,
   Edit3,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, getAuthHeaders } from '@/lib/supabaseClient';
 import { PAYMENT_CONFIG, generateUpiUri, triggerHapticFeedback } from '@/lib/paymentConfig';
 
 interface CartItem {
@@ -34,6 +34,7 @@ interface CartItem {
   packageName?: string;
   deliveryDays?: number;
   price: number;
+  usdPrice?: number;
   quantity: number;
   imageSrc?: string;
 }
@@ -64,6 +65,7 @@ export default function CheckoutPage() {
   const router = useRouter();
 
   const [items, setItems] = useState<CartItem[]>([]);
+  const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
   const [isLoaded, setIsLoaded] = useState(false);
   const [authUser, setAuthUser] = useState<{ id: string; email?: string | null } | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -152,7 +154,8 @@ export default function CheckoutPage() {
         // fallback to default config
       });
 
-    fetch('/api/coupons')
+    getAuthHeaders()
+      .then((authHeaders) => fetch('/api/coupons', { headers: authHeaders }))
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
         if (Array.isArray(json?.data)) {
@@ -164,6 +167,11 @@ export default function CheckoutPage() {
     let loadedDraft: CheckoutDraft | null = null;
 
     try {
+      const savedCurr = localStorage.getItem('taliyo_currency');
+      if (savedCurr === 'USD' || savedCurr === 'INR') {
+        setCurrency(savedCurr);
+      }
+
       const stored = localStorage.getItem('taliyo_cart');
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -315,9 +323,33 @@ export default function CheckoutPage() {
     [items]
   );
 
+  const usdSubtotal = useMemo(
+    () =>
+      items.reduce((acc, item) => {
+        const unitInr = Number(item.price) || 0;
+        const unitUsd =
+          item.usdPrice && item.usdPrice > 0
+            ? Number(item.usdPrice)
+            : unitInr > 0
+              ? Math.max(19, Math.round(unitInr / 83))
+              : 0;
+        return acc + unitUsd * (Number(item.quantity) || 1);
+      }, 0),
+    [items],
+  );
+
   const finalPayable = appliedCoupon ? Math.max(0, subtotal - appliedCoupon.discountAmount) : subtotal;
   const advanceRatio = (gateway.advancePercent || 30) / 100;
   const payableNow = paymentMethod === 'advance' ? Math.round(finalPayable * advanceRatio) : finalPayable;
+  const usdRatio = subtotal > 0 ? payableNow / subtotal : 0;
+  const usdPayableApprox = subtotal > 0 ? Math.max(1, Math.round(usdSubtotal * usdRatio)) : 0;
+
+  const handleCurrencyChange = (next: 'INR' | 'USD') => {
+    setCurrency(next);
+    try {
+      localStorage.setItem('taliyo_currency', next);
+    } catch {}
+  };
 
   // Re-verify restored/applied coupon once customer auth & email resolve so user-specific rules catch ineligible accounts before payment
   useEffect(() => {
@@ -325,16 +357,19 @@ export default function CheckoutPage() {
     let cancelled = false;
     const customerEmail = (email || authUser.email || '').trim() || null;
 
-    fetch('/api/coupons/validate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: appliedCoupon.code,
-        orderAmount: subtotal,
-        userId: authUser.id,
-        email: customerEmail,
-      }),
-    })
+    getAuthHeaders()
+      .then((authHeaders) =>
+        fetch('/api/coupons/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({
+            code: appliedCoupon.code,
+            orderAmount: subtotal,
+            userId: authUser.id,
+            email: customerEmail,
+          }),
+        }),
+      )
       .then((r) => r.json())
       .then((json) => {
         if (cancelled) return;
@@ -397,9 +432,10 @@ export default function CheckoutPage() {
     setCouponError(null);
 
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch('/api/coupons/validate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           code: couponInput.trim(),
           orderAmount: subtotal,
@@ -467,37 +503,50 @@ export default function CheckoutPage() {
   };
 
   const isUtrTwelveDigits = /^\d{12}$/.test(utr.trim());
+  const cleanBankRef = utr.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const isBankRefValid = cleanBankRef.length >= 8;
 
-  // Auto-Verify UTR Check whenever 12 digits are entered
+  // Auto-Verify UTR / Bank Reference Check for UPI, 30% Advance, and Bank Transfer
   useEffect(() => {
-    const clean = utr.trim();
-    if ((paymentMethod !== 'upi' && paymentMethod !== 'advance') || !/^\d{12}$/.test(clean)) {
+    const clean = paymentMethod === 'bank' ? cleanBankRef : utr.trim();
+    const readyToVerify =
+      paymentMethod === 'bank' ? clean.length >= 8 : /^\d{12}$/.test(clean);
+
+    if (!readyToVerify || finalPayable <= 0) {
       setUtrCheck(null);
+      setIsCheckingUtr(false);
       return;
     }
 
     let cancelled = false;
     setIsCheckingUtr(true);
-    fetch('/api/payments/verify-utr', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ utr: clean, amount: payableNow, method: paymentMethod }),
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setUtrCheck(data);
-      })
-      .catch(() => {
-        if (!cancelled) setUtrCheck(null);
-      })
-      .finally(() => {
-        if (!cancelled) setIsCheckingUtr(false);
-      });
+
+    const timer = setTimeout(() => {
+      getAuthHeaders()
+        .then((authHeaders) =>
+          fetch('/api/payments/verify-utr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({ utr: clean, amount: payableNow, method: paymentMethod }),
+          }),
+        )
+        .then((r) => r.json())
+        .then((data) => {
+          if (!cancelled) setUtrCheck(data);
+        })
+        .catch(() => {
+          if (!cancelled) setUtrCheck(null);
+        })
+        .finally(() => {
+          if (!cancelled) setIsCheckingUtr(false);
+        });
+    }, 250);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [utr, payableNow, paymentMethod]);
+  }, [utr, cleanBankRef, payableNow, finalPayable, paymentMethod]);
 
   const handleConfirmPayment = async () => {
     if (finalPayable > 0) {
@@ -505,14 +554,24 @@ export default function CheckoutPage() {
         setSubmitError('Please enter your 12-digit UPI UTR / Reference ID from your payment receipt to confirm.');
         return;
       }
-      if (paymentMethod === 'bank' && utr.trim().length < 6) {
-        setSubmitError('Please enter your NEFT / IMPS Reference Number to confirm your bank transfer.');
+      if (paymentMethod === 'bank' && cleanBankRef.length < 8) {
+        setSubmitError('Please enter a valid NEFT / IMPS / RTGS Reference Number (at least 8 characters).');
         return;
       }
     }
 
+    if (isCheckingUtr) {
+      setSubmitError('Please wait a moment while we verify your payment reference...');
+      return;
+    }
+
     if (utrCheck?.duplicate) {
-      setSubmitError(utrCheck.message || 'This UTR has already been used on another order.');
+      setSubmitError(utrCheck.message || 'This payment reference has already been used on another order.');
+      return;
+    }
+
+    if (finalPayable > 0 && utrCheck && utrCheck.valid === false) {
+      setSubmitError(utrCheck.message || 'Invalid payment reference. Please check and re-enter.');
       return;
     }
 
@@ -530,17 +589,19 @@ export default function CheckoutPage() {
         return;
       }
 
+      const submittedRef = paymentMethod === 'bank' ? cleanBankRef : utr.trim();
       const titleSummary = items.map((i) => i.title).join(', ');
-      const paymentDetails = `Ref: ${orderRef} | Method: ${paymentMethod.toUpperCase()} (${gateway.upiId})${
-        utr.trim() ? ` | UTR: ${utr.trim()}` : ''
-      }`;
+      const paymentDetails = `Ref: ${orderRef} | Method: ${paymentMethod.toUpperCase()} (${
+        paymentMethod === 'bank' ? `${gateway.bankName || 'NEFT/IMPS'} • ${gateway.accountNumber}` : gateway.upiId
+      })${submittedRef ? ` | UTR: ${submittedRef}` : ''}`;
       const couponNote = appliedCoupon
         ? ` | Coupon: ${appliedCoupon.code} (-₹${appliedCoupon.discountAmount.toLocaleString('en-IN')})`
         : '';
 
+      const authHeaders = await getAuthHeaders();
       const res = await fetch('/api/bookings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           service_title: titleSummary || 'Service Order',
           service_price: String(payableNow),
@@ -559,7 +620,7 @@ export default function CheckoutPage() {
           final_price: payableNow,
           payment_method: paymentMethod,
           order_ref: orderRef,
-          utr: utr.trim() || null,
+          utr: submittedRef || null,
           advance_amount: paymentMethod === 'advance' ? payableNow : 0,
           coupon_code: appliedCoupon ? appliedCoupon.code : null,
           discount_amount: appliedCoupon ? appliedCoupon.discountAmount : 0,
@@ -694,31 +755,78 @@ export default function CheckoutPage() {
           <form onSubmit={handleContinueToPayment} className="flex-1 px-4 pt-4 space-y-4">
             {/* Order Summary Card */}
             <div className="rounded-3xl bg-[#101126] border border-purple-500/25 p-4 space-y-3 shadow-lg">
-              <div className="flex items-center justify-between border-b border-purple-500/15 pb-2.5">
+              <div className="flex items-center justify-between border-b border-purple-500/15 pb-2.5 gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300">
                   Order Summary ({items.length} {items.length === 1 ? 'Item' : 'Items'})
                 </span>
-                <span className="text-[11px] text-emerald-400 font-semibold">0% Convenience Fee</span>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center rounded-full bg-[#171936] border border-purple-500/25 p-0.5 text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleCurrencyChange('INR')}
+                      className={`px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+                        currency === 'INR' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      ₹ INR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCurrencyChange('USD')}
+                      className={`px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+                        currency === 'USD' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      $ USD
+                    </button>
+                  </div>
+                  <span className="text-[11px] text-emerald-400 font-semibold hidden sm:inline">0% Fee</span>
+                </div>
               </div>
 
               <div className="space-y-2.5">
-                {items.map((item) => (
-                  <div key={item.id} className="flex items-start justify-between gap-3 text-xs">
-                    <div className="min-w-0">
-                      <p className="font-bold text-white truncate">{item.title}</p>
-                      <p className="text-[11px] text-gray-400">
-                        {item.packageName || 'Standard Plan'} • Qty {item.quantity || 1}
-                      </p>
+                {items.map((item) => {
+                  const lineInr = (item.price || 0) * (item.quantity || 1);
+                  const unitUsd =
+                    item.usdPrice && item.usdPrice > 0
+                      ? item.usdPrice
+                      : item.price > 0
+                        ? Math.max(19, Math.round(item.price / 83))
+                        : 0;
+                  const lineUsd = unitUsd * (item.quantity || 1);
+                  return (
+                    <div key={item.id} className="flex items-start justify-between gap-3 text-xs">
+                      <div className="min-w-0">
+                        <p className="font-bold text-white truncate">{item.title}</p>
+                        <p className="text-[11px] text-gray-400">
+                          {item.packageName || 'Standard Plan'} • Qty {item.quantity || 1}
+                          {typeof item.deliveryDays === 'number' && (
+                            <> • {item.deliveryDays === 0 ? 'Instant Digital' : `${item.deliveryDays} Days`}</>
+                          )}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-bold text-white block">
+                          {currency === 'USD' ? `$${lineUsd.toLocaleString('en-US')} USD` : `₹${lineInr.toLocaleString('en-IN')}`}
+                        </span>
+                        {currency === 'USD' && lineInr > 0 && (
+                          <span className="text-[10px] text-gray-400">₹{lineInr.toLocaleString('en-IN')}</span>
+                        )}
+                      </div>
                     </div>
-                    <span className="font-bold text-white shrink-0">
-                      ₹{((item.price || 0) * (item.quantity || 1)).toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="pt-2.5 border-t border-purple-500/15 flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-300">Payable Total</span>
+                <div>
+                  <span className="text-xs font-bold text-gray-300 block">Payable Total</span>
+                  {currency === 'USD' && (
+                    <span className="text-[10px] text-gray-400 block">
+                      UPI / NEFT settles in ₹{finalPayable.toLocaleString('en-IN')} INR
+                    </span>
+                  )}
+                </div>
                 {appliedCoupon ? (
                   <div className="text-right">
                     <span className="text-xs text-gray-500 line-through mr-2">
@@ -729,9 +837,13 @@ export default function CheckoutPage() {
                     </span>
                   </div>
                 ) : (
-                  <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 to-white">
-                    ₹{subtotal.toLocaleString('en-IN')}
-                  </span>
+                  <div className="text-right">
+                    <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 to-white">
+                      {currency === 'USD'
+                        ? `$${usdSubtotal.toLocaleString('en-US')} USD`
+                        : `₹${subtotal.toLocaleString('en-IN')}`}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -929,12 +1041,19 @@ export default function CheckoutPage() {
                   {finalPayable === 0
                     ? 'Custom Quote Request'
                     : paymentMethod === 'advance'
-                    ? '30% Advance Due Now'
+                    ? `${gateway.advancePercent || 30}% Advance Due Now`
                     : 'Exact Amount Locked'}
                 </span>
                 <span className="text-xl font-black text-white">
-                  {finalPayable === 0 ? 'Custom Quote (₹0 Due Now)' : `₹${payableNow.toLocaleString('en-IN')}`}
+                  {finalPayable === 0
+                    ? 'Custom Quote (₹0 Due Now)'
+                    : `₹${payableNow.toLocaleString('en-IN')}`}
                 </span>
+                {currency === 'USD' && finalPayable > 0 && (
+                  <span className="text-[10px] text-purple-300 font-semibold block">
+                    Approx. ${usdPayableApprox.toLocaleString('en-US')} USD
+                  </span>
+                )}
               </div>
               <button
                 type="button"
@@ -964,7 +1083,11 @@ export default function CheckoutPage() {
             <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-[#111226] border border-purple-500/20">
               <button
                 type="button"
-                onClick={() => setPaymentMethod('upi')}
+                onClick={() => {
+                  setPaymentMethod('upi');
+                  setSubmitError(null);
+                  setUtrCheck(null);
+                }}
                 className={`py-2.5 px-2 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
                   paymentMethod === 'upi'
                     ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-md'
@@ -977,7 +1100,11 @@ export default function CheckoutPage() {
 
               <button
                 type="button"
-                onClick={() => setPaymentMethod('advance')}
+                onClick={() => {
+                  setPaymentMethod('advance');
+                  setSubmitError(null);
+                  setUtrCheck(null);
+                }}
                 className={`py-2.5 px-2 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
                   paymentMethod === 'advance'
                     ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-md'
@@ -985,12 +1112,16 @@ export default function CheckoutPage() {
                 }`}
               >
                 <Clock className="w-4 h-4" />
-                <span>30% Adv</span>
+                <span>{gateway.advancePercent || 30}% Adv</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setPaymentMethod('bank')}
+                onClick={() => {
+                  setPaymentMethod('bank');
+                  setSubmitError(null);
+                  setUtrCheck(null);
+                }}
                 className={`py-2.5 px-2 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
                   paymentMethod === 'bank'
                     ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-md'
@@ -1116,11 +1247,16 @@ export default function CheckoutPage() {
                     maxLength={12}
                     placeholder="e.g. 402319876543 (12 digits)"
                     value={utr}
-                    onChange={(e) => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                    onChange={(e) => {
+                      setUtr(e.target.value.replace(/\D/g, '').slice(0, 12));
+                      setSubmitError(null);
+                    }}
                     className={`w-full px-3.5 py-3 rounded-xl bg-[#171936] border text-white placeholder-gray-500 text-sm font-mono tracking-wider focus:outline-none transition-all ${
-                      isUtrTwelveDigits
-                        ? 'border-emerald-500/60 focus:border-emerald-400'
-                        : 'border-purple-500/25 focus:border-purple-400'
+                      utrCheck?.duplicate || utrCheck?.valid === false
+                        ? 'border-rose-500/60 focus:border-rose-400'
+                        : isUtrTwelveDigits
+                          ? 'border-emerald-500/60 focus:border-emerald-400'
+                          : 'border-purple-500/25 focus:border-purple-400'
                     }`}
                   />
 
@@ -1133,7 +1269,7 @@ export default function CheckoutPage() {
                   {!isCheckingUtr && isUtrTwelveDigits && utrCheck && (
                     <p
                       className={`text-[11px] font-semibold flex items-center gap-1.5 ${
-                        utrCheck.duplicate
+                        utrCheck.duplicate || utrCheck.valid === false
                           ? 'text-rose-400'
                           : utrCheck.poolMatched
                             ? 'text-emerald-300'
@@ -1157,6 +1293,13 @@ export default function CheckoutPage() {
             {/* Bank Transfer Option */}
             {paymentMethod === 'bank' && (
               <div className="rounded-3xl bg-[#101126] border border-purple-500/30 p-5 space-y-3 text-xs">
+                <div className="flex items-center justify-between pb-1">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/30 text-emerald-300 text-[10px] font-bold">
+                    <ShieldCheck className="w-3 h-3" />
+                    <span>IMPS / NEFT / RTGS • Auto-Verification</span>
+                  </span>
+                </div>
+
                 <div className="flex justify-between items-center py-1.5 border-b border-purple-500/10">
                   <span className="text-gray-400">Bank Name</span>
                   <span className="font-bold text-white">{gateway.bankName}</span>
@@ -1172,6 +1315,7 @@ export default function CheckoutPage() {
                     <button
                       type="button"
                       onClick={() => handleCopy(gateway.accountNumber, setCopiedAcc)}
+                      aria-label="Copy Account Number"
                       className="text-fuchsia-400 cursor-pointer"
                     >
                       {copiedAcc ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1185,6 +1329,7 @@ export default function CheckoutPage() {
                     <button
                       type="button"
                       onClick={() => handleCopy(gateway.ifsc, setCopiedIfsc)}
+                      aria-label="Copy IFSC Code"
                       className="text-fuchsia-400 cursor-pointer"
                     >
                       {copiedIfsc ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1192,18 +1337,52 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                <div className="pt-2 space-y-1.5">
-                  <label htmlFor="bank-utr" className="text-xs font-bold text-white block">
-                    NEFT / IMPS Reference Number
-                  </label>
+                <div className="pt-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="bank-utr" className="text-xs font-bold text-white block">
+                      NEFT / IMPS / RTGS Reference Number
+                    </label>
+                    <span className="text-[10px] text-gray-400">8–22 chars</span>
+                  </div>
                   <input
                     id="bank-utr"
                     type="text"
-                    placeholder="Enter IMPS / NEFT Ref Number"
+                    maxLength={22}
+                    placeholder="e.g. HDFC261116987654"
                     value={utr}
-                    onChange={(e) => setUtr(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#171936] border border-purple-500/25 text-white placeholder-gray-500 text-xs font-mono focus:outline-none focus:border-purple-400"
+                    onChange={(e) => {
+                      setUtr(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 22));
+                      setSubmitError(null);
+                    }}
+                    className={`w-full px-3.5 py-2.5 rounded-xl bg-[#171936] border text-white placeholder-gray-500 text-xs font-mono tracking-wider focus:outline-none transition-all ${
+                      utrCheck?.duplicate || utrCheck?.valid === false
+                        ? 'border-rose-500/60 focus:border-rose-400'
+                        : isBankRefValid
+                          ? 'border-emerald-500/60 focus:border-emerald-400'
+                          : 'border-purple-500/25 focus:border-purple-400'
+                    }`}
                   />
+
+                  {isCheckingUtr && (
+                    <p className="text-[11px] text-purple-300 font-semibold flex items-center gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking reference against settlement pool...
+                    </p>
+                  )}
+
+                  {!isCheckingUtr && isBankRefValid && utrCheck && (
+                    <p
+                      className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                        utrCheck.duplicate || utrCheck.valid === false
+                          ? 'text-rose-400'
+                          : utrCheck.poolMatched
+                            ? 'text-emerald-300'
+                            : 'text-emerald-400'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>{utrCheck.message}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             )}
