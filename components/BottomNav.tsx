@@ -22,7 +22,7 @@ export default function BottomNav() {
     pathname === '/wishlist';
 
   return (
-    <div className="fixed bottom-3 inset-x-0 z-50 flex justify-center px-4 pointer-events-none">
+    <div className="fixed bottom-0 inset-x-0 z-50 flex justify-center px-4 pb-3 pt-4 bg-gradient-to-t from-[#07070d] via-[#07070d]/85 to-transparent pointer-events-none">
       <nav className="pointer-events-auto w-full max-w-md rounded-[28px] bg-[#0c0d1f]/95 border border-purple-500/20 shadow-[0_12px_40px_rgba(0,0,0,0.85)] backdrop-blur-2xl px-5 py-2.5 flex items-center justify-between">
         {/* Home */}
         <Link
@@ -51,17 +51,31 @@ export default function BottomNav() {
         </Link>
 
         {/* Center Project Advisor CTA */}
-        <div className="relative -top-4 flex flex-col items-center">
+        <div className="relative -top-3.5 flex flex-col items-center -mb-2.5">
           <Link
             href="/advisor"
-            aria-label="Project Advisor"
-            className={`group relative w-13 h-13 p-0.5 rounded-full bg-gradient-to-tr from-purple-600 via-fuchsia-500 to-pink-500 shadow-[0_8px_20px_rgba(168,85,247,0.4)] ring-4 ring-[#07070d] transition-all hover:scale-105 active:scale-95 ${
-              isAdvisor ? 'ring-purple-500 scale-105' : ''
-            }`}
+            aria-label="AI Project Advisor (Coming Soon)"
+            className="flex flex-col items-center gap-0.5 group"
           >
-            <div className="w-12 h-12 rounded-full bg-[#160b30] flex items-center justify-center transition-colors group-hover:bg-[#200e44]">
-              <Cpu className="w-5 h-5 text-white" />
+            <div
+              className={`relative w-12 h-12 p-0.5 rounded-full bg-gradient-to-tr from-purple-600 via-fuchsia-500 to-pink-500 shadow-[0_8px_20px_rgba(168,85,247,0.4)] ring-4 ring-[#07070d] transition-all group-hover:scale-105 group-active:scale-95 ${
+                isAdvisor ? 'ring-purple-500 scale-105' : ''
+              }`}
+            >
+              <div className="w-full h-full rounded-full bg-[#160b30] flex items-center justify-center transition-colors group-hover:bg-[#200e44]">
+                <Cpu className="w-5 h-5 text-white" />
+              </div>
+              <span className="absolute -top-1.5 -right-2 px-1.5 py-0.2 rounded-full bg-amber-500 text-[#07070d] text-[8px] font-black uppercase tracking-tight shadow">
+                Soon
+              </span>
             </div>
+            <span
+              className={`text-[9px] tracking-tight ${
+                isAdvisor ? 'text-fuchsia-400 font-bold' : 'text-purple-200/80 font-medium'
+              }`}
+            >
+              Advisor
+            </span>
           </Link>
         </div>
 

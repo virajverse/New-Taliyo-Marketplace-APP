@@ -96,7 +96,7 @@ export default function PrivacyPolicyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07070d] text-white flex flex-col relative pb-32">
+    <div className="min-h-screen bg-[#07070d] text-white flex flex-col relative pb-40">
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-[#07070d]/90 backdrop-blur-xl border-b border-purple-500/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">

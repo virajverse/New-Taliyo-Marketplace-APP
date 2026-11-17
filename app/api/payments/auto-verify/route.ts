@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  doesAmountMatchExpected,
+  extractAmountFromPayload,
   extractUtrFromPayload,
   findExistingBookingWithUtr,
+  isIncomingCreditNotification,
   loadGatewayConfig,
   loadVerifiedUtrPool,
   markBookingConfirmedWithUtr,
@@ -9,6 +12,8 @@ import {
   saveVerifiedUtrPool,
   VerifiedUtrEntry,
 } from '@/lib/paymentServer';
+import { sendAdminNotification } from '@/lib/notifications';
+import { bumpCacheVersions, invalidateCachePrefix } from '@/lib/redisCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,28 +39,62 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const creditCheck = isIncomingCreditNotification(body);
+    if (!creditCheck.allowed) {
+      return NextResponse.json({
+        ok: true,
+        ignored: true,
+        reason: creditCheck.reason || 'non_credit_message',
+      });
+    }
+
     const utr = extractUtrFromPayload(body);
 
-    if (!/^\d{12}$/.test(utr)) {
+    if (!/^[A-Z0-9]{8,22}$/.test(utr)) {
       return NextResponse.json(
-        { error: 'invalid_or_missing_12_digit_utr' },
+        { error: 'invalid_or_missing_utr_reference' },
         { status: 400 }
       );
     }
 
-    const amount = Number(body.amount || 0) || 0;
+    const amount = extractAmountFromPayload(body);
     const sender = String(body.sender || body.vpa || '').slice(0, 80);
-    const source = String(body.source || 'Paytm Webhook').slice(0, 60);
+    const source = String(body.source || 'Bank/UPI Settlement Webhook').slice(0, 60);
 
     let matchedBookingId: string | null = null;
     let bookingConfirmedNow = false;
+    let amountMismatch = false;
 
     const existingBooking = await findExistingBookingWithUtr(utr);
     if (existingBooking) {
       matchedBookingId = existingBooking.id;
-      if (existingBooking.status === 'pending') {
+      let notesObj: Record<string, unknown> = {};
+      try {
+        notesObj = existingBooking.additional_notes ? JSON.parse(String(existingBooking.additional_notes)) : {};
+      } catch {
+        notesObj = {};
+      }
+
+      const isBalanceRef =
+        Boolean(notesObj.balancePendingReview) &&
+        String(notesObj.balanceUtr || '').toUpperCase() === utr.toUpperCase();
+      const expectedAmt = isBalanceRef
+        ? Number(notesObj.balanceAmount || 0)
+        : Number(existingBooking.final_price || 0);
+
+      if (doesAmountMatchExpected(amount, expectedAmt) && (existingBooking.status === 'pending' || isBalanceRef)) {
         await markBookingConfirmedWithUtr(existingBooking, utr, source);
         bookingConfirmedNow = true;
+        await Promise.allSettled([
+          sendAdminNotification(
+            `Auto-Verified Settlement (#${String(existingBooking.id).slice(0, 8)})`,
+            `Received ₹${amount.toLocaleString('en-IN')} via ${source} (Ref: ${utr}). Order automatically confirmed.`,
+          ),
+          invalidateCachePrefix('taliyo:notifications:'),
+          bumpCacheVersions('notifications'),
+        ]);
+      } else if (expectedAmt > 0 && amount > 0 && !doesAmountMatchExpected(amount, expectedAmt)) {
+        amountMismatch = true;
       }
     }
 
@@ -77,6 +116,7 @@ export async function POST(req: NextRequest) {
       utr,
       matchedBookingId,
       bookingConfirmedNow,
+      amountMismatch,
       storedInPool: true,
     });
   } catch (err) {

@@ -33,6 +33,42 @@ interface CategoryService {
   isFeatured?: boolean;
 }
 
+function ServiceCardImage({
+  src,
+  alt,
+  sizes,
+}: {
+  src: string;
+  alt: string;
+  sizes: string;
+}) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <>
+      {!loaded && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-gradient-to-br from-[#1b143a] via-[#2b1e5a] to-[#130e29] animate-pulse"
+        />
+      )}
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        loading="lazy"
+        sizes={sizes}
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+        className={`object-cover group-hover:scale-105 transition-all duration-500 ${
+          loaded ? 'opacity-100' : 'opacity-0'
+        }`}
+        unoptimized
+      />
+    </>
+  );
+}
+
 export default function CategoryDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -397,14 +433,10 @@ export default function CategoryDetailPage() {
                       >
                         <div>
                           <div className="w-full aspect-[4/3] bg-[#1b143a] relative overflow-hidden">
-                            <Image
+                            <ServiceCardImage
                               src={svc.imageSrc}
                               alt={svc.title}
-                              fill
-                              loading="lazy"
                               sizes="(max-width: 640px) 50vw, 300px"
-                              className="object-cover group-hover:scale-105 transition-transform duration-500"
-                              unoptimized
                             />
                             {svc.badge && (
                               <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/60 border border-purple-400/30 text-[9px] font-bold text-white backdrop-blur-md">
@@ -466,14 +498,10 @@ export default function CategoryDetailPage() {
                   >
                     <div className="flex gap-3">
                       <div className="w-24 h-24 rounded-2xl bg-[#1b143a] flex-shrink-0 relative overflow-hidden">
-                        <Image
+                        <ServiceCardImage
                           src={svc.imageSrc}
                           alt={svc.title}
-                          fill
-                          loading="lazy"
                           sizes="96px"
-                          className="object-cover group-hover:scale-105 transition-transform duration-500"
-                          unoptimized
                         />
                         {svc.badge && (
                           <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/60 border border-purple-400/30 text-[9px] font-bold text-white backdrop-blur-md">

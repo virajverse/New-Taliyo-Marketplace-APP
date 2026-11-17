@@ -25,25 +25,35 @@ export async function POST(req: NextRequest) {
     }
 
     const fwd = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
-    const userIp = (fwd || req.headers.get('x-real-ip') || '').slice(0, 120) || null;
-    const userAgent = (req.headers.get('user-agent') || '').slice(0, 500) || null;
+    const userIp = (fwd || req.headers.get('x-real-ip') || '').slice(0, 120) || undefined;
+    const userAgent = (req.headers.get('user-agent') || '').slice(0, 500) || undefined;
 
     const { error } = await supabaseAdmin.from('banner_events').insert([
       {
         banner_id: id,
         event_type: type,
         user_agent: userAgent,
-        ip: userIp,
+        ip_address: userIp,
       },
     ]);
 
     if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      // Fallback for 2-column minimal banner_events table or missing optional columns
+      const { error: fallbackErr } = await supabaseAdmin.from('banner_events').insert([
+        {
+          banner_id: id,
+          event_type: type,
+        },
+      ]);
+      if (fallbackErr) {
+        console.warn('Banner telemetry skipped:', fallbackErr.message);
+        return NextResponse.json({ ok: true, logged: false });
+      }
     }
 
     return NextResponse.json({ ok: true, logged: true });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Server error';
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    console.warn('Banner track non-fatal error:', err instanceof Error ? err.message : err);
+    return NextResponse.json({ ok: true, logged: false });
   }
 }

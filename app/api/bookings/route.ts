@@ -8,6 +8,7 @@ import {
 } from '@/lib/couponServer';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
+  doesAmountMatchExpected,
   findExistingBookingWithUtr,
   loadGatewayConfig,
   loadVerifiedUtrPool,
@@ -305,10 +306,8 @@ export async function POST(req: NextRequest) {
         if (poolEntry) {
           const expectedAmt = advanceAmount || finalPriceToPersist;
           const amtMatches =
-            !poolEntry.amount ||
-            !expectedAmt ||
-            Math.abs(Number(poolEntry.amount) - expectedAmt) <= 5 ||
-            Math.abs(Number(poolEntry.amount) - finalPriceToPersist) <= 5;
+            doesAmountMatchExpected(Number(poolEntry.amount || 0), expectedAmt) ||
+            doesAmountMatchExpected(Number(poolEntry.amount || 0), finalPriceToPersist);
 
           if (amtMatches) {
             finalStatus = 'confirmed';
@@ -590,9 +589,7 @@ export async function PATCH(req: NextRequest) {
         const pool = await loadVerifiedUtrPool();
         const poolEntry = pool.find((entry) => entry.utr === cleanUtr);
         if (poolEntry) {
-          const amtMatches =
-            !poolEntry.amount ||
-            Math.abs(Number(poolEntry.amount) - remainingBalance) <= 5;
+          const amtMatches = doesAmountMatchExpected(Number(poolEntry.amount || 0), remainingBalance);
           if (amtMatches) {
             balanceAutoVerified = true;
             balanceSource = poolEntry.source || 'Settlement Pool';

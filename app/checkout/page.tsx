@@ -136,6 +136,7 @@ export default function CheckoutPage() {
     source?: string;
   } | null>(null);
   const [isCheckingUtr, setIsCheckingUtr] = useState(false);
+  const [isPollingSettlement, setIsPollingSettlement] = useState(false);
   const [autoVerifiedResult, setAutoVerifiedResult] = useState<{
     verified: boolean;
     source?: string;
@@ -388,6 +389,54 @@ export default function CheckoutPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authReady, authUser?.id]);
+
+  // Live Settlement Polling on Step 3 when payment is awaiting real bank/UPI verification
+  useEffect(() => {
+    if (step !== 3 || !placedOrderId || autoVerifiedResult?.verified) return;
+    let cancelled = false;
+
+    const pollNow = async () => {
+      try {
+        const authHeaders = await getAuthHeaders();
+        const res = await fetch(
+          `/api/payments/verify-utr?bookingId=${encodeURIComponent(placedOrderId)}`,
+          { cache: 'no-store', headers: authHeaders },
+        );
+        const json = await res.json();
+        if (!cancelled && json?.verified) {
+          triggerHapticFeedback([120, 60, 120]);
+          setAutoVerifiedResult({ verified: true, source: json.source || 'Settlement Pool' });
+        }
+      } catch {}
+    };
+
+    const timer = setInterval(pollNow, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [step, placedOrderId, autoVerifiedResult?.verified]);
+
+  const handleManualCheckSettlement = async () => {
+    if (!placedOrderId || isPollingSettlement) return;
+    setIsPollingSettlement(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(
+        `/api/payments/verify-utr?bookingId=${encodeURIComponent(placedOrderId)}`,
+        { cache: 'no-store', headers: authHeaders },
+      );
+      const json = await res.json();
+      if (json?.verified) {
+        triggerHapticFeedback([120, 60, 120]);
+        setAutoVerifiedResult({ verified: true, source: json.source || 'Settlement Pool' });
+      }
+    } catch {
+      // ignore transient network check
+    } finally {
+      setIsPollingSettlement(false);
+    }
+  };
 
   // Real NPCI UPI Deep Link & QR Code routed to live configured Merchant VPA
   const upiUri = useMemo(() => {
@@ -743,9 +792,13 @@ export default function CheckoutPage() {
             <div className="px-2.5 py-1 rounded-full bg-purple-900/30 border border-purple-500/30 text-purple-200 text-[10px] font-bold">
               Step 1 of 2
             </div>
-          ) : (
+          ) : autoVerifiedResult?.verified ? (
             <div className="px-2.5 py-1 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold">
               Confirmed
+            </div>
+          ) : (
+            <div className="px-2.5 py-1 rounded-full bg-amber-950/50 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
+              Pending Verify
             </div>
           )}
         </header>
@@ -1254,36 +1307,42 @@ export default function CheckoutPage() {
                     className={`w-full px-3.5 py-3 rounded-xl bg-[#171936] border text-white placeholder-gray-500 text-sm font-mono tracking-wider focus:outline-none transition-all ${
                       utrCheck?.duplicate || utrCheck?.valid === false
                         ? 'border-rose-500/60 focus:border-rose-400'
-                        : isUtrTwelveDigits
+                        : utrCheck?.poolMatched
                           ? 'border-emerald-500/60 focus:border-emerald-400'
-                          : 'border-purple-500/25 focus:border-purple-400'
+                          : isUtrTwelveDigits
+                            ? 'border-amber-500/50 focus:border-amber-400'
+                            : 'border-purple-500/25 focus:border-purple-400'
                     }`}
                   />
 
                   {isCheckingUtr && (
                     <p className="text-[11px] text-purple-300 font-semibold flex items-center gap-1.5">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking UTR against settlement pool...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking settlement records for real payment...
                     </p>
                   )}
 
                   {!isCheckingUtr && isUtrTwelveDigits && utrCheck && (
                     <p
-                      className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                      className={`text-[11px] font-semibold flex items-start gap-1.5 ${
                         utrCheck.duplicate || utrCheck.valid === false
                           ? 'text-rose-400'
                           : utrCheck.poolMatched
                             ? 'text-emerald-300'
-                            : 'text-emerald-400'
+                            : 'text-amber-300'
                       }`}
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      {utrCheck.poolMatched ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      ) : (
+                        <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      )}
                       <span>{utrCheck.message}</span>
                     </p>
                   )}
 
                   {!isCheckingUtr && isUtrTwelveDigits && !utrCheck && (
-                    <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Valid 12-digit UTR format verified
+                    <p className="text-[11px] text-amber-300 font-semibold flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> UTR saved — awaiting real payment receipt check
                     </p>
                   )}
                 </div>
@@ -1348,7 +1407,7 @@ export default function CheckoutPage() {
                     id="bank-utr"
                     type="text"
                     maxLength={22}
-                    placeholder="e.g. HDFC261116987654"
+                    placeholder="Enter IMPS / NEFT / RTGS Reference No."
                     value={utr}
                     onChange={(e) => {
                       setUtr(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 22));
@@ -1357,29 +1416,35 @@ export default function CheckoutPage() {
                     className={`w-full px-3.5 py-2.5 rounded-xl bg-[#171936] border text-white placeholder-gray-500 text-xs font-mono tracking-wider focus:outline-none transition-all ${
                       utrCheck?.duplicate || utrCheck?.valid === false
                         ? 'border-rose-500/60 focus:border-rose-400'
-                        : isBankRefValid
+                        : utrCheck?.poolMatched
                           ? 'border-emerald-500/60 focus:border-emerald-400'
-                          : 'border-purple-500/25 focus:border-purple-400'
+                          : isBankRefValid
+                            ? 'border-amber-500/50 focus:border-amber-400'
+                            : 'border-purple-500/25 focus:border-purple-400'
                     }`}
                   />
 
                   {isCheckingUtr && (
                     <p className="text-[11px] text-purple-300 font-semibold flex items-center gap-1.5">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking reference against settlement pool...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking bank settlement records...
                     </p>
                   )}
 
                   {!isCheckingUtr && isBankRefValid && utrCheck && (
                     <p
-                      className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                      className={`text-[11px] font-semibold flex items-start gap-1.5 ${
                         utrCheck.duplicate || utrCheck.valid === false
                           ? 'text-rose-400'
                           : utrCheck.poolMatched
                             ? 'text-emerald-300'
-                            : 'text-emerald-400'
+                            : 'text-amber-300'
                       }`}
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      {utrCheck.poolMatched ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      ) : (
+                        <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      )}
                       <span>{utrCheck.message}</span>
                     </p>
                   )}
@@ -1412,7 +1477,9 @@ export default function CheckoutPage() {
                   <span>
                     {finalPayable === 0
                       ? 'Submit Quote Order Request (₹0 Payable Now)'
-                      : `I Have Paid • Confirm Order (₹${payableNow.toLocaleString('en-IN')})`}
+                      : utrCheck?.poolMatched
+                        ? `Payment Verified • Confirm Order (₹${payableNow.toLocaleString('en-IN')})`
+                        : `Submit Reference for Verification (₹${payableNow.toLocaleString('en-IN')})`}
                   </span>
                 </>
               )}
@@ -1420,36 +1487,54 @@ export default function CheckoutPage() {
           </div>
         )}
 
-        {/* STEP 3: Payment Submitted & Confirmed Receipt */}
+        {/* STEP 3: Real-Time Verification Receipt */}
         {step === 3 && (
-          <div className="flex-1 px-4 pt-10 flex flex-col items-center text-center space-y-5">
-            <div className="w-20 h-20 rounded-full bg-emerald-500/15 border-2 border-emerald-400/50 flex items-center justify-center text-emerald-400 shadow-[0_0_40px_rgba(16,185,129,0.25)]">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
+          <div className="flex-1 px-4 pt-8 flex flex-col items-center text-center space-y-5">
+            {autoVerifiedResult?.verified ? (
+              <div className="w-20 h-20 rounded-full bg-emerald-500/15 border-2 border-emerald-400/50 flex items-center justify-center text-emerald-400 shadow-[0_0_40px_rgba(16,185,129,0.25)]">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-amber-500/15 border-2 border-amber-400/50 flex items-center justify-center text-amber-400 shadow-[0_0_40px_rgba(245,158,11,0.22)]">
+                <Clock className="w-10 h-10 animate-pulse" />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <h1 className="text-xl font-black text-white">
                 {autoVerifiedResult?.verified
-                  ? 'Payment Auto-Verified & Confirmed!'
-                  : 'Order Submitted Successfully!'}
+                  ? 'Payment Verified & Order Confirmed!'
+                  : 'Verification Pending — Not Confirmed Yet'}
               </h1>
               <p className="text-xs text-gray-400 max-w-xs mx-auto leading-relaxed">
                 {autoVerifiedResult?.verified
-                  ? `Your UTR (${utr.trim()}) matched our settlement records — your project booking is now confirmed.`
-                  : 'Your payment verification request and order details have been saved. Our team will verify and start your project shortly.'}
+                  ? `Real payment receipt for UTR (${utr.trim()}) matched ${autoVerifiedResult.source || 'settlement records'} — your booking is officially confirmed.`
+                  : 'Order abhi CONFIRM nahi hua hai. Jab real Bank/UPI payment credit confirm hoga tabhi order auto-confirm hoga (auto-checking every 5s).'}
               </p>
             </div>
 
+            {!autoVerifiedResult?.verified && placedOrderId && (
+              <button
+                type="button"
+                onClick={handleManualCheckSettlement}
+                disabled={isPollingSettlement}
+                className="px-4 py-2 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-200 hover:bg-amber-500/25 text-xs font-bold inline-flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isPollingSettlement ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+                <span>{isPollingSettlement ? 'Checking Settlement...' : 'Check Real Payment Status Now'}</span>
+              </button>
+            )}
+
             <div className="w-full rounded-3xl bg-[#101126] border border-purple-500/25 p-4 space-y-2.5 text-xs text-left">
               <div className="flex justify-between">
-                <span className="text-gray-400">Verification Status</span>
+                <span className="text-gray-400">Order & Payment Status</span>
                 {autoVerifiedResult?.verified ? (
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 font-bold text-[11px]">
-                    Auto-Verified
+                    Payment Verified • Confirmed
                   </span>
                 ) : (
                   <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/30 text-amber-300 font-bold text-[11px]">
-                    Pending Verification
+                    Pending Real Settlement
                   </span>
                 )}
               </div>

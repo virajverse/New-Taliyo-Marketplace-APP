@@ -37,6 +37,8 @@ interface OrderItem {
   imageSrc: string;
   progressPercent: number;
   remainingBalance?: number;
+  paymentVerified?: boolean;
+  refundStatus?: string | null;
 }
 
 export default function OrdersPage() {
@@ -222,6 +224,10 @@ export default function OrdersPage() {
               }
             }
 
+            const refundObj = parsedNotes.refundRequest as { status?: string } | undefined;
+            const refundStatus =
+              refundObj?.status && refundObj.status !== 'withdrawn' ? String(refundObj.status) : null;
+
             return {
               id: b.id,
               orderNumber: `#TLY${b.id.slice(0, 6).toUpperCase()}`,
@@ -244,6 +250,8 @@ export default function OrdersPage() {
               imageSrc: realImage,
               progressPercent: pct,
               remainingBalance,
+              paymentVerified: Boolean(parsedNotes.paymentVerified),
+              refundStatus,
             };
           });
           setOrders(mapped);
@@ -619,6 +627,19 @@ export default function OrdersPage() {
                       <span className="inline-block px-2 py-0.5 rounded-full bg-purple-900/50 border border-purple-400/30 text-[10px] font-bold text-purple-200">
                         {order.planName}
                       </span>
+                      {isPending && !order.paymentVerified && (
+                        <span className="inline-block px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/35 text-[10px] font-bold text-amber-300">
+                          Awaiting Payment Verification
+                        </span>
+                      )}
+                      {order.refundStatus && (
+                        <Link
+                          href={`/orders/${order.id}`}
+                          className="inline-block px-2 py-0.5 rounded-full bg-fuchsia-500/15 border border-fuchsia-400/40 text-[10px] font-bold text-fuchsia-300 uppercase"
+                        >
+                          Refund: {order.refundStatus.replace('_', ' ')}
+                        </Link>
+                      )}
                       {Number(order.remainingBalance || 0) > 0 && (
                         <Link
                           href={`/orders/${order.id}`}

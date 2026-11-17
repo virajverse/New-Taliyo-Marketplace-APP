@@ -1,14 +1,107 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  doesAmountMatchExpected,
   findExistingBookingWithUtr,
   loadGatewayConfig,
   loadVerifiedUtrPool,
+  markBookingConfirmedWithUtr,
   normalizeUtr,
 } from '@/lib/paymentServer';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { resolveAuthUserFromRequest } from '@/lib/authServer';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
+
+const UUID_REGEX =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/**
+ * Live settlement status check for a submitted booking (polls booking & UTR settlement pool).
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const auth = await resolveAuthUserFromRequest(req);
+    if (!auth.user) {
+      return NextResponse.json({ verified: false, error: 'Unauthorized' }, { status: auth.status || 401 });
+    }
+
+    const bookingId = new URL(req.url).searchParams.get('bookingId')?.trim() || '';
+    if (!bookingId || !UUID_REGEX.test(bookingId)) {
+      return NextResponse.json({ verified: false, error: 'Valid bookingId required' }, { status: 400 });
+    }
+
+    const { data: booking } = await supabaseAdmin
+      .from('bookings')
+      .select('id, user_id, email, customer_email, status, service_title, final_price, additional_notes')
+      .eq('id', bookingId)
+      .maybeSingle();
+
+    if (!booking) {
+      return NextResponse.json({ verified: false, error: 'Order not found' }, { status: 404 });
+    }
+
+    const matchesOwner = booking.user_id
+      ? booking.user_id === auth.user.id
+      : Boolean(auth.user.email) &&
+        (String(booking.email || '').trim().toLowerCase() === auth.user.email ||
+          String(booking.customer_email || '').trim().toLowerCase() === auth.user.email);
+
+    if (!matchesOwner) {
+      return NextResponse.json({ verified: false, error: 'Forbidden' }, { status: 403 });
+    }
+
+    let notesObj: Record<string, unknown> = {};
+    try {
+      notesObj = booking.additional_notes ? JSON.parse(String(booking.additional_notes)) : {};
+    } catch {
+      notesObj = {};
+    }
+
+    const alreadyVerified =
+      Boolean(notesObj.paymentVerified) ||
+      ['confirmed', 'work_started', 'in_progress', 'delivered', 'completed'].includes(
+        String(booking.status || '').toLowerCase(),
+      );
+
+    if (alreadyVerified) {
+      return NextResponse.json({
+        verified: true,
+        status: booking.status,
+        source: notesObj.verifiedBy || 'Verified Settlement',
+        utr: notesObj.verifiedUtr || notesObj.utr || null,
+      });
+    }
+
+    // Re-check incoming settlement pool in case webhook arrived after checkout
+    const pendingUtr = String(notesObj.utr || '').trim();
+    const expectedAmount = Number(booking.final_price || 0);
+    if (pendingUtr && expectedAmount > 0 && booking.status === 'pending') {
+      const pool = await loadVerifiedUtrPool();
+      const matched = pool.find((item) => item.utr === pendingUtr);
+      if (matched && doesAmountMatchExpected(Number(matched.amount || 0), expectedAmount)) {
+        const src = matched.source || 'Settlement Pool';
+        await markBookingConfirmedWithUtr(booking, pendingUtr, src);
+        return NextResponse.json({
+          verified: true,
+          status: 'confirmed',
+          source: src,
+          utr: pendingUtr,
+        });
+      }
+    }
+
+    return NextResponse.json({
+      verified: false,
+      status: booking.status || 'pending',
+      utr: pendingUtr || null,
+      message: 'Awaiting real bank/UPI credit settlement confirmation',
+    });
+  } catch (err) {
+    console.error('verify-utr GET error:', err);
+    return NextResponse.json({ verified: false, status: 'error' }, { status: 500 });
+  }
+}
 
 export async function POST(req: NextRequest) {
   const limited = await enforceRateLimit(req, 'paymentOrder');
@@ -82,38 +175,40 @@ export async function POST(req: NextRequest) {
     if (matched) {
       const amountOk =
         !expectedAmount ||
-        !matched.amount ||
-        Math.abs(Number(matched.amount) - expectedAmount) <= 5;
+        doesAmountMatchExpected(Number(matched.amount || 0), expectedAmount);
 
       if (!amountOk) {
         return NextResponse.json({
-          valid: true,
+          valid: false,
+          verified: false,
           duplicate: false,
           poolMatched: false,
           status: 'amount_mismatch',
           utr: clean,
-          message: `UTR found for ₹${matched.amount}, expected ₹${expectedAmount}. Queued for Admin review.`,
+          message: `Settlement amount mismatch: received ₹${matched.amount || 0}, expected ₹${expectedAmount}. Order will NOT auto-confirm.`,
         });
       }
 
       return NextResponse.json({
         valid: true,
+        verified: true,
         duplicate: false,
         poolMatched: true,
         status: 'auto_verified',
         utr: clean,
         source: matched.source || 'Settlement Pool',
-        message: 'UTR verified against incoming payment settlement! Ready for instant confirmation.',
+        message: 'Real payment received & verified against settlement pool! Ready for instant confirmation.',
       });
     }
 
     return NextResponse.json({
       valid: true,
+      verified: false,
       duplicate: false,
       poolMatched: false,
-      status: 'format_verified_pending',
+      status: 'awaiting_settlement',
       utr: clean,
-      message: 'Valid 12-digit UTR format & unique — order will submit for merchant verification',
+      message: 'No matching bank/UPI credit received yet for this UTR. Order stays Pending (Not Confirmed) until real money receipt matches.',
     });
   } catch (err) {
     console.error('verify-utr POST error:', err);

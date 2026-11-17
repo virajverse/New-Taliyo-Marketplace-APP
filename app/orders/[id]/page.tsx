@@ -22,6 +22,9 @@ import {
   ShieldCheck,
   Star,
   Download,
+  RotateCcw,
+  RefreshCw,
+  X,
 } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import { subscribeSmartFetch } from '@/lib/clientCache';
@@ -56,6 +59,20 @@ interface BookingInfo {
   balancePendingReview?: boolean;
   balanceUtr?: string | null;
   files?: Array<{ name: string; url?: string; path?: string }>;
+  refundRequest?: {
+    id: string;
+    status: 'requested' | 'under_review' | 'approved' | 'refunded' | 'rejected' | 'withdrawn';
+    requestedAmount: number;
+    reason: string;
+    details: string;
+    payoutMethod: 'upi' | 'bank';
+    payoutDestination: string;
+    refundUtr?: string | null;
+    adminNote?: string | null;
+    requestedAt: string;
+    updatedAt: string;
+  } | null;
+  verifiedPaidAmount?: number;
 }
 
 export default function OrderMilestoneTrackerPage() {
@@ -102,6 +119,20 @@ export default function OrderMilestoneTrackerPage() {
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [balanceSuccess, setBalanceSuccess] = useState<string | null>(null);
   const [copiedBalanceField, setCopiedBalanceField] = useState<string | null>(null);
+  const [isCheckingVerification, setIsCheckingVerification] = useState(false);
+
+  // Return & Refund UI State
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState('service_not_started');
+  const [refundDetails, setRefundDetails] = useState('');
+  const [refundPayoutMethod, setRefundPayoutMethod] = useState<'upi' | 'bank'>('upi');
+  const [refundUpiId, setRefundUpiId] = useState('');
+  const [refundHolder, setRefundHolder] = useState('');
+  const [refundAcc, setRefundAcc] = useState('');
+  const [refundIfsc, setRefundIfsc] = useState('');
+  const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+  const [refundSuccessMsg, setRefundSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/payment-settings')
@@ -223,6 +254,14 @@ export default function OrderMilestoneTrackerPage() {
                 }))
             : [];
 
+          const verifiedInitialAmt = Boolean(parsedNotes.paymentVerified)
+            ? Number(parsedNotes.advanceAmount || booking.final_price || 0)
+            : 0;
+          const verifiedBalanceAmt = Boolean(parsedNotes.balancePaid)
+            ? Number(parsedNotes.balanceAmount || 0)
+            : 0;
+          const verifiedPaidAmount = Math.max(0, Math.round(verifiedInitialAmt + verifiedBalanceAmt));
+
           setBookingInfo({
             id: booking.id,
             orderNumber: `#TLY${booking.id.slice(0, 6).toUpperCase()}`,
@@ -243,6 +282,8 @@ export default function OrderMilestoneTrackerPage() {
             balancePendingReview: Boolean(parsedNotes.balancePendingReview),
             balanceUtr: (parsedNotes.balanceUtr as string) || null,
             files: bookingFiles,
+            refundRequest: (parsedNotes.refundRequest as BookingInfo['refundRequest']) || null,
+            verifiedPaidAmount,
           });
 
           // Fetch progress steps from Redis-cached catalog API
@@ -466,6 +507,129 @@ export default function OrderMilestoneTrackerPage() {
       setBalanceError('Network error submitting balance payment.');
     } finally {
       setIsSubmittingBalance(false);
+    }
+  };
+
+  // Live auto-verification polling when order is pending payment confirmation
+  useEffect(() => {
+    if (!bookingInfo.id || bookingInfo.paymentVerified || bookingInfo.status.toLowerCase() !== 'pending' || !bookingInfo.utr) {
+      return;
+    }
+    let cancelled = false;
+
+    const pollSettlement = async () => {
+      try {
+        const authHeaders = await getAuthHeaders();
+        const res = await fetch(
+          `/api/payments/verify-utr?bookingId=${encodeURIComponent(bookingInfo.id)}`,
+          { cache: 'no-store', headers: authHeaders },
+        );
+        const json = await res.json();
+        if (!cancelled && json?.verified) {
+          triggerHapticFeedback([120, 60, 120]);
+          setBookingInfo((prev) => ({
+            ...prev,
+            status: json.status || 'confirmed',
+            paymentVerified: true,
+          }));
+        }
+      } catch {}
+    };
+
+    const timer = setInterval(pollSettlement, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [bookingInfo.id, bookingInfo.paymentVerified, bookingInfo.status, bookingInfo.utr]);
+
+  const handleManualVerifyRefresh = async () => {
+    if (!bookingInfo.id || isCheckingVerification) return;
+    setIsCheckingVerification(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(
+        `/api/payments/verify-utr?bookingId=${encodeURIComponent(bookingInfo.id)}`,
+        { cache: 'no-store', headers: authHeaders },
+      );
+      const json = await res.json();
+      if (json?.verified) {
+        triggerHapticFeedback([120, 60, 120]);
+        setBookingInfo((prev) => ({
+          ...prev,
+          status: json.status || 'confirmed',
+          paymentVerified: true,
+        }));
+      }
+    } catch {
+    } finally {
+      setIsCheckingVerification(false);
+    }
+  };
+
+  const handleSubmitRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRefundError(null);
+    setRefundSuccessMsg(null);
+    setIsSubmittingRefund(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/refunds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({
+          bookingId: bookingInfo.id,
+          reason: refundReason,
+          details: refundDetails.trim(),
+          payoutMethod: refundPayoutMethod,
+          upiId: refundUpiId.trim(),
+          accountHolder: refundHolder.trim(),
+          accountNumber: refundAcc.trim(),
+          ifsc: refundIfsc.trim().toUpperCase(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setRefundError(json?.error || 'Could not submit return/refund request.');
+        return;
+      }
+      setBookingInfo((prev) => ({ ...prev, refundRequest: json.refundRequest }));
+      setRefundSuccessMsg(
+        `Return / Refund request ${json.refundRequest?.id} submitted for ₹${Number(
+          json.refundRequest?.requestedAmount || 0,
+        ).toLocaleString('en-IN')}.`,
+      );
+      setIsRefundModalOpen(false);
+      setRefundDetails('');
+    } catch {
+      setRefundError('Network error submitting refund request.');
+    } finally {
+      setIsSubmittingRefund(false);
+    }
+  };
+
+  const handleWithdrawRefund = async () => {
+    if (!bookingInfo.id || isSubmittingRefund) return;
+    setIsSubmittingRefund(true);
+    setRefundError(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/refunds', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ bookingId: bookingInfo.id, action: 'withdraw' }),
+      });
+      const json = await res.json();
+      if (res.ok && json.refundRequest) {
+        setBookingInfo((prev) => ({ ...prev, refundRequest: json.refundRequest }));
+        setRefundSuccessMsg('Refund request withdrawn.');
+      } else {
+        setRefundError(json?.error || 'Unable to withdraw request.');
+      }
+    } catch {
+      setRefundError('Network error withdrawing refund request.');
+    } finally {
+      setIsSubmittingRefund(false);
     }
   };
 
@@ -767,10 +931,27 @@ export default function OrderMilestoneTrackerPage() {
                   </span>
                 ) : (
                   <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/35 text-amber-300 text-[10px] font-bold">
-                    Verification Pending
+                    Pending Real Settlement (Unconfirmed)
                   </span>
                 )}
               </div>
+
+              {!bookingInfo.paymentVerified && bookingInfo.status.toLowerCase() === 'pending' && bookingInfo.utr && (
+                <div className="p-2.5 rounded-xl bg-amber-950/35 border border-amber-500/30 flex items-center justify-between gap-2 text-[11px]">
+                  <span className="text-amber-200/90 leading-snug">
+                    Order confirm tab hoga jab real Bank/UPI payment receive verify hoga.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleManualVerifyRefresh}
+                    disabled={isCheckingVerification}
+                    className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-60"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isCheckingVerification ? 'animate-spin' : ''}`} />
+                    <span>Verify</span>
+                  </button>
+                </div>
+              )}
 
               {bookingInfo.utr && (
                 <div className="text-[11px] text-gray-300 flex items-center justify-between bg-[#0c0d1c] rounded-xl px-3 py-2 border border-purple-500/15">
@@ -979,6 +1160,223 @@ export default function OrderMilestoneTrackerPage() {
                   ),
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Return & Refund Center */}
+          <div className="rounded-[22px] bg-[#121326]/95 border border-purple-500/25 p-4 space-y-3 shadow-lg">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <RotateCcw className="w-4 h-4 text-fuchsia-400 shrink-0" />
+                <span className="text-xs font-extrabold text-white">Return & Refund Protection</span>
+              </div>
+              {bookingInfo.refundRequest && (
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase ${
+                    bookingInfo.refundRequest.status === 'refunded'
+                      ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300'
+                      : bookingInfo.refundRequest.status === 'rejected' || bookingInfo.refundRequest.status === 'withdrawn'
+                        ? 'bg-rose-500/15 border-rose-400/40 text-rose-300'
+                        : 'bg-amber-500/15 border-amber-400/40 text-amber-300'
+                  }`}
+                >
+                  {bookingInfo.refundRequest.status.replace('_', ' ')}
+                </span>
+              )}
+            </div>
+
+            {refundSuccessMsg && (
+              <div className="p-2.5 rounded-xl bg-emerald-950/45 border border-emerald-500/35 text-[11px] text-emerald-300 font-semibold">
+                {refundSuccessMsg}
+              </div>
+            )}
+
+            {bookingInfo.refundRequest && bookingInfo.refundRequest.status !== 'withdrawn' ? (
+              <div className="space-y-2 text-[11px] bg-[#0c0d1c] rounded-xl p-3 border border-purple-500/15">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Refund ID</span>
+                  <span className="font-mono font-bold text-purple-200">{bookingInfo.refundRequest.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Verified Refund Amount</span>
+                  <span className="font-bold text-emerald-400">
+                    ₹{Number(bookingInfo.refundRequest.requestedAmount || 0).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-400 shrink-0">Payout To</span>
+                  <span className="font-mono text-white text-right truncate">
+                    {bookingInfo.refundRequest.payoutDestination}
+                  </span>
+                </div>
+                {bookingInfo.refundRequest.refundUtr && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Refund Credit UTR</span>
+                    <span className="font-mono font-bold text-emerald-300">{bookingInfo.refundRequest.refundUtr}</span>
+                  </div>
+                )}
+                {bookingInfo.refundRequest.status === 'requested' && (
+                  <button
+                    type="button"
+                    disabled={isSubmittingRefund}
+                    onClick={handleWithdrawRefund}
+                    className="w-full mt-1 py-2 rounded-xl bg-[#181936] border border-purple-500/25 text-gray-300 hover:text-rose-300 text-[11px] font-bold cursor-pointer disabled:opacity-60"
+                  >
+                    Withdraw Refund Request
+                  </button>
+                )}
+              </div>
+            ) : (bookingInfo.verifiedPaidAmount || 0) > 0 ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] text-gray-300 leading-relaxed">
+                  Verified Paid: <strong className="text-white">₹{Number(bookingInfo.verifiedPaidAmount).toLocaleString('en-IN')}</strong>. Eligible for milestone return / refund review.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRefundError(null);
+                    setIsRefundModalOpen(true);
+                  }}
+                  className="shrink-0 px-3 py-2 rounded-xl bg-purple-600/25 border border-purple-400/40 hover:bg-purple-600/40 text-purple-200 text-[11px] font-bold cursor-pointer"
+                >
+                  Request Return / Refund
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-gray-400 leading-relaxed">
+                No verified settled payment recorded yet. Pending/unverified orders can be cancelled anytime from Orders with ₹0 deduction.
+              </p>
+            )}
+          </div>
+
+          {/* Return / Refund Request Modal */}
+          {isRefundModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <form
+                onSubmit={handleSubmitRefund}
+                className="w-full max-w-md rounded-3xl bg-[#121326] border border-purple-500/30 p-5 space-y-3.5 shadow-2xl"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-white">Request Return / Refund</h3>
+                    <p className="text-[11px] text-gray-400">
+                      Max Verified Refund: ₹{Number(bookingInfo.verifiedPaidAmount || 0).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsRefundModalOpen(false)}
+                    aria-label="Close Refund Modal"
+                    className="w-8 h-8 rounded-full bg-[#1b1c36] flex items-center justify-center text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-purple-200 block">Reason</label>
+                  <select
+                    value={refundReason}
+                    onChange={(e) => setRefundReason(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-[#171936] border border-purple-500/25 text-white text-xs focus:outline-none focus:border-purple-400"
+                  >
+                    <option value="service_not_started">Work not started within promised SLA</option>
+                    <option value="milestone_mismatch">Deliverable / milestone did not match scope</option>
+                    <option value="quality_issue">Technical / code quality issue unresolved</option>
+                    <option value="duplicate_payment">Duplicate payment deducted</option>
+                    <option value="cancelled_paid_order">Order cancelled after verified payment</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-purple-200 block">Details (min 10 chars)</label>
+                  <textarea
+                    rows={3}
+                    required
+                    minLength={10}
+                    placeholder="Explain the issue or milestone mismatch..."
+                    value={refundDetails}
+                    onChange={(e) => setRefundDetails(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#171936] border border-purple-500/25 text-white placeholder-gray-500 text-xs focus:outline-none focus:border-purple-400 resize-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-purple-200 block">Refund Payout Destination</label>
+                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[#0c0d1c] border border-purple-500/20">
+                    <button
+                      type="button"
+                      onClick={() => setRefundPayoutMethod('upi')}
+                      className={`py-1.5 rounded-lg text-[11px] font-bold cursor-pointer ${
+                        refundPayoutMethod === 'upi' ? 'bg-purple-600 text-white' : 'text-gray-400'
+                      }`}
+                    >
+                      UPI ID
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRefundPayoutMethod('bank')}
+                      className={`py-1.5 rounded-lg text-[11px] font-bold cursor-pointer ${
+                        refundPayoutMethod === 'bank' ? 'bg-purple-600 text-white' : 'text-gray-400'
+                      }`}
+                    >
+                      Bank Account
+                    </button>
+                  </div>
+
+                  {refundPayoutMethod === 'upi' ? (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Your UPI ID (e.g. name@okicici)"
+                      value={refundUpiId}
+                      onChange={(e) => setRefundUpiId(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl bg-[#171936] border border-purple-500/25 text-white placeholder-gray-500 text-xs font-mono focus:outline-none focus:border-purple-400"
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Account Holder Name"
+                        value={refundHolder}
+                        onChange={(e) => setRefundHolder(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-[#171936] border border-purple-500/25 text-white placeholder-gray-500 text-xs focus:outline-none"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Account Number"
+                          value={refundAcc}
+                          onChange={(e) => setRefundAcc(e.target.value.replace(/\D/g, '').slice(0, 24))}
+                          className="w-full px-3 py-2 rounded-xl bg-[#171936] border border-purple-500/25 text-white placeholder-gray-500 text-xs font-mono focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          required
+                          maxLength={11}
+                          placeholder="IFSC Code"
+                          value={refundIfsc}
+                          onChange={(e) => setRefundIfsc(e.target.value.toUpperCase().slice(0, 11))}
+                          className="w-full px-3 py-2 rounded-xl bg-[#171936] border border-purple-500/25 text-white placeholder-gray-500 text-xs font-mono focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {refundError && <p className="text-[11px] text-rose-400 font-semibold">{refundError}</p>}
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingRefund}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-xs font-extrabold cursor-pointer disabled:opacity-60"
+                >
+                  {isSubmittingRefund ? 'Submitting Request...' : 'Submit Return / Refund Request'}
+                </button>
+              </form>
             </div>
           )}
 
